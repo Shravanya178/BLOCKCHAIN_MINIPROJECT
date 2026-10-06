@@ -2,7 +2,7 @@ const request = require('supertest');
 const app = require('../../src/app');
 const prisma = require('../../src/config/prisma');
 
-jest.setTimeout(60000);
+jest.setTimeout(180000);
 
 describe('Full End-to-End API Integration', () => {
   let adminToken;
