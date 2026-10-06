@@ -1,6 +1,8 @@
-# Blockchain-Based Academic and Event Certificate Generation & Verification System
+# Blockchain-Based Academic & Event Certificate Generation and Verification System
 
-Backend and Blockchain Integration for college event certificate issuance, PDF cryptographic hashing, smart contract registration, and public verification.
+[![CI - Smart Contracts & Backend Build](https://github.com/Shravanya178/BLOCKCHAIN_MINIPROJECT/actions/workflows/ci.yml/badge.svg)](https://github.com/Shravanya178/BLOCKCHAIN_MINIPROJECT/actions/workflows/ci.yml)
+
+A secure, tamper-proof backend and blockchain integration system for issuing, personalizing, and publicly verifying college event certificates using **Solidity smart contracts**, **Node.js/Express**, and **PostgreSQL (Neon)**.
 
 ---
 
@@ -12,153 +14,207 @@ Backend and Blockchain Integration for college event certificate issuance, PDF c
 
 ---
 
-## 🏗️ Architecture & Tech Stack
+## 🏗️ Architecture & How It Works
 
-- **Backend Framework:** Node.js & Express.js
-- **Database:** PostgreSQL (Neon Serverless) with Prisma ORM
-- **Smart Contract:** Solidity `CertificateRegistry` (OpenZeppelin AccessControl)
-- **Blockchain Framework:** Hardhat & ethers.js v6
-- **Networks:** Local Hardhat Network (ChainId: 31337) / Sepolia Testnet
-- **PDF Generation & Rendering:** PDFKit with dynamic text layout & Canva background overlay
-- **QR Codes:** `qrcode` library pointing to public verification endpoint
-- **Authentication:** JWT (access & rotating refresh tokens), bcryptjs password hashing
-- **File Uploads:** Multer (CSV bulk recipients, PDF verification uploads, Canva backgrounds)
-- **API Documentation:** Interactive Swagger UI at `/api/docs`
+```mermaid
+flowchart TD
+    subgraph Authority Workflow
+        A[Admin / Teacher Logs in] --> B[Create Event & Select Template]
+        B --> C[Enter Student or Upload CSV]
+        C --> D[Backend Renders PDF with QR Code]
+        D --> E[Compute SHA-256 Hash of PDF Bytes]
+        E --> F[Submit Registration Tx to Smart Contract]
+        F --> G[Store PDF & Confirmed Tx Details]
+    end
+
+    subgraph Public Verification
+        H[Scan QR Code or Enter Cert ID] --> I[GET /api/v1/verify/:id]
+        I --> J[Query Smart Contract on Blockchain]
+        J --> K[Return VERIFIED / NOT_FOUND / REVOKED]
+        L[Upload Certificate PDF File] --> M[POST /api/v1/verify/document]
+        M --> N[Compute File Hash & Compare to Blockchain]
+        N --> O[Detect Any PDF Tampering / Alteration]
+    end
+```
+
+### Key Principles:
+1. **Canva Template Integration**: Certificate designs are created in Canva and exported as PNG/JPEG. The backend overlays personalized text and the QR code using fractional page coordinates.
+2. **Cryptographic Integrity**: The SHA-256 hash is calculated from the *exact finalized PDF file bytes* after rendering.
+3. **No Personal Data on Blockchain**: Only the `certificateId`, document `hash (bytes32)`, `issuer`, and `timestamps` are stored on the blockchain. Student identifiers, names, and contact details remain strictly in the secure PostgreSQL database.
+4. **Authoritative Blockchain Truth**: A certificate is never marked as verified unless confirmed by the smart contract.
 
 ---
 
-## 🚀 Quick Start (Windows PowerShell)
+## 💻 Tech Stack
+
+- **Backend:** Node.js (v20+) & Express.js
+- **Database & ORM:** PostgreSQL (Neon Serverless) & Prisma ORM
+- **Smart Contract:** Solidity `0.8.24` (OpenZeppelin AccessControl)
+- **Blockchain Framework:** Hardhat & `ethers.js` v6
+- **Networks:** Local Hardhat Node (`localhost:8545`) & Ethereum Sepolia Testnet
+- **PDF Generation:** PDFKit
+- **QR Codes:** `qrcode` (points directly to public verification URL)
+- **Authentication:** JWT Access Tokens & Rotating Refresh Tokens, `bcryptjs`
+- **Validation:** Zod schemas
+- **API Docs:** Interactive Swagger UI at `/api/docs`
+
+---
+
+## 🚀 Setup & Execution Guide (Windows PowerShell)
 
 ### 1. Prerequisites
-- **Node.js** v20+ and **npm** v10+
-- **Git**
-- PostgreSQL database URL (configured in `backend/.env`)
+- [Node.js v20+](https://nodejs.org/) installed (`node -v`)
+- [Git](https://git-scm.com/) installed
+- PostgreSQL connection string (configured in `.env`)
 
-### 2. Install Dependencies
+### 2. Clone and Install Dependencies
 ```powershell
-cd backend
+git clone https://github.com/Shravanya178/BLOCKCHAIN_MINIPROJECT.git
+cd BLOCKCHAIN_MINIPROJECT/backend
 npm install
 ```
 
-### 3. Configure Environment Variables
-Copy `.env.example` to `.env`:
+### 3. Environment Configuration
+Create `backend/.env` (use `backend/.env.example` as a template):
 ```powershell
 cp .env.example .env
 ```
-Ensure `DATABASE_URL` is set to your PostgreSQL instance.
+Ensure `DATABASE_URL` and `DIRECT_URL` point to your PostgreSQL instance.
 
-### 4. Database Setup & Seeding
+### 4. Database Migration & Seeding
 ```powershell
 npx prisma db push
 node prisma/seed.js
 ```
 The seed script creates:
-- **Admin account:** `admin@college.edu` / `Admin@12345`
-- **Teacher account:** `teacher@college.edu` / `Teacher@12345`
-- **Starter Canva-compatible templates** (Participation, Achievement, Workshop, Technical)
+- **Default Admin Account:** `admin@college.edu` | `Admin@12345`
+- **Default Teacher Account:** `teacher@college.edu` | `Teacher@12345`
+- **4 Starter Templates:** Participation, Achievement, Workshop, and Technical
 - **Demo College Event:** *HackVenture 2026 - Annual Hackathon*
 
-### 5. Start Local Blockchain
-In a separate terminal:
+### 5. Start the Local Blockchain Node
+Open **Terminal 1**:
 ```powershell
 cd backend
 npm run chain
 ```
-This boots Hardhat local node at `http://127.0.0.1:8545`.
+*Leaves a local Ethereum JSON-RPC node running at `http://127.0.0.1:8545`.*
 
-### 6. Deploy Smart Contract
-In another terminal:
+### 6. Deploy the Smart Contract
+Open **Terminal 2**:
 ```powershell
 cd backend
 npm run deploy:local
 ```
-This deploys `CertificateRegistry.sol` and writes `deployments/localhost.json`.
+*Compiles `CertificateRegistry.sol`, deploys it, and saves deployment info to `deployments/localhost.json`.*
 
 ### 7. Start the Backend API Server
+In **Terminal 2**:
 ```powershell
-cd backend
 npm start
 ```
-- API Base: `http://localhost:4000/api/v1`
-- Swagger UI: `http://localhost:4000/api/docs`
-- Health check: `http://localhost:4000/health`
-- Readiness check: `http://localhost:4000/ready`
+- **API Base:** `http://localhost:4000/api/v1`
+- **Interactive Swagger Docs:** `http://localhost:4000/api/docs`
+- **Health Check:** `http://localhost:4000/health`
+- **Readiness Check:** `http://localhost:4000/ready`
+
+---
+
+## 🎨 Frontend Team Integration Guide
+
+The frontend connects to the backend at `http://localhost:4000/api/v1`.
+
+### 1. Authentication
+- Send `POST /api/v1/auth/login` with `{ email, password }`.
+- Store `accessToken` and pass it in the `Authorization: Bearer <token>` header for protected endpoints.
+- When expired, call `POST /api/v1/auth/refresh` with `{ refreshToken }`.
+
+### 2. Canva Template Workflow
+1. Design your certificate in Canva with placeholders for student name, event date, QR code, etc.
+2. Export the template from Canva as a high-resolution PNG or JPEG.
+3. Upload the background using `PATCH /api/v1/templates/:templateId` (`multipart/form-data` with field `background`).
+4. Customize dynamic text positions in `layout` using fractional coordinates `(0.0 to 1.0)`:
+   - `x`, `y`: Top-left offset as fraction of page width & height
+   - `width`: Width of the bounding box
+   - `fontSize`: Base font size in points (auto-shrinks if name is long)
+5. Call `GET /api/v1/templates/:templateId/preview` to view and download a live sample PDF.
+
+### 3. Issuing Single Certificate
+`POST /api/v1/certificates` (JSON):
+```json
+{
+  "eventId": "UUID_OF_EVENT",
+  "templateId": "UUID_OF_TEMPLATE",
+  "studentName": "Shravanya Andhale",
+  "studentId": "2023CS0101",
+  "achievement": "First Prize",
+  "certificateTitle": "Certificate of Excellence"
+}
+```
+**Response includes:**
+- `certificateId`: e.g., `CERT-2026-X8K9M3P2`
+- `status`: `CONFIRMED`
+- `documentHash`: `0x...` (SHA-256 of the generated PDF)
+- `txHash`: Transaction hash recorded on blockchain
+- `blockNumber`: Block number of transaction
+- `verificationUrl`: Stable public URL for QR scanning
+
+### 4. Bulk Issuance via CSV Upload
+`POST /api/v1/certificates/bulk` (`multipart/form-data`):
+- `eventId`: UUID
+- `templateId`: UUID
+- `file`: CSV file
+
+**Supported CSV Format:**
+```csv
+student_name,student_id,achievement
+"Arnav Chaudhary","CS-2023-001","Special Mention"
+"Shravanya Andhale","CS-2023-002","First Prize"
+"Karuna Jeswani","CS-2023-003","Runner Up"
+"Nikhil Kadam","CS-2023-004","Finalist"
+```
+Returns row-level statuses and batch details.
+
+### 5. Public Verification (No Login Required)
+- **By ID:** `GET /api/v1/verify/:certificateId`
+  - Queries blockchain directly in real-time.
+  - Returns `VERIFIED`, `REVOKED`, or `NOT_FOUND`.
+- **By Uploaded PDF:** `POST /api/v1/verify/document`
+  - Upload PDF file under `file`.
+  - Calculates SHA-256 and compares to blockchain registry.
+  - Returns `HASH_MISMATCH` if any single character or image was modified!
 
 ---
 
 ## 🧪 Testing
 
-### Run Smart Contract Tests:
+### Smart Contract Unit Tests
 ```powershell
 npm run test:contracts
 ```
-Covers:
-- Role-based access control (Admin / Issuer)
-- Certificate registration & event emission
-- Duplicate certificate ID prevention
-- Custom error validation
-- Public lookup and verification
-- Certificate revocation by authorized roles
+Runs 13 tests covering registration, role-based access, duplicate prevention, custom errors, lookups, and revocations.
 
-### Run API End-to-End Tests:
+### End-to-End API Integration Tests
 ```powershell
 npm run test:api
 ```
+Tests complete flows: Auth -> Events -> Single Issuance -> PDF Tamper Detection -> Bulk 10 Recipients -> Revocation.
 
 ---
 
-## 📋 Key REST API Endpoints
+## 🌐 Deploying to Ethereum Sepolia Testnet
 
-### 🔐 Authentication
-- `POST /api/v1/auth/login` - Login with email and password
-- `POST /api/v1/auth/refresh` - Rotate refresh token
-- `GET /api/v1/auth/me` - Get authenticated profile
-- `POST /api/v1/auth/logout` - Invalidate session
-
-### 📅 Events
-- `GET /api/v1/events` - List college events
-- `POST /api/v1/events` - Create event (Teacher / Admin)
-- `GET /api/v1/events/:id` - View event details & issuance stats
-- `PATCH /api/v1/events/:id` - Update event
-- `POST /api/v1/events/:id/archive` - Archive event
-
-### 🎨 Templates (Canva Integration)
-- `GET /api/v1/templates` - List templates
-- `GET /api/v1/templates/:id/preview` - Download sample preview PDF
-- `GET /api/v1/templates/:id/background` - Download Canva background image
-- `PATCH /api/v1/templates/:id` - Upload exported Canva PNG/JPG & adjust fractional field coordinates
-
-### 🎓 Certificate Issuance
-- `POST /api/v1/certificates` - Issue a single certificate:
-  1. Personalizes certificate PDF
-  2. Embeds dynamic QR code pointing to `/api/v1/verify/<id>`
-  3. Computes SHA-256 hash of finalized PDF bytes
-  4. Submits transaction to `CertificateRegistry` smart contract
-  5. Waits for confirmation and stores tx hash and block number
-- `POST /api/v1/certificates/bulk` - Bulk issuance via CSV upload or JSON list (supports 10-15+ students with per-row statuses)
-- `GET /api/v1/certificates` - List certificates with filters
-- `GET /api/v1/certificates/:id/pdf` - Download generated certificate PDF
-- `POST /api/v1/certificates/:id/retry` - Safely retry failed blockchain registrations
-- `POST /api/v1/certificates/:id/revoke` - Revoke certificate on-chain and in DB
-
-### 🔍 Public Verification (No Login Required)
-- `GET /api/v1/verify/:certificateId` - Verify certificate by ID:
-  - Reads live state from blockchain smart contract
-  - Returns `VERIFIED`, `NOT_FOUND`, or `REVOKED`
-  - Returns transaction hash, block number, and certificate details
-- `POST /api/v1/verify/document` - Verify uploaded PDF file:
-  - Computes SHA-256 of uploaded bytes
-  - Matches with blockchain registry
-  - Returns `HASH_MISMATCH` if any pixel or text in the PDF was altered!
-
----
-
-## 📄 CSV Bulk Upload Format
-
-```csv
-student_name,student_id,achievement
-"Arnav Chaudhary","CS-2023-001","First Place"
-"Shravanya Andhale","CS-2023-002","Second Place"
-"Karuna Jeswani","CS-2023-003","Third Place"
-"Nikhil Kadam","CS-2023-004","Participant"
-```
+1. Obtain a Sepolia RPC URL (Infura/Alchemy) and a funded private key.
+2. In `backend/.env`:
+   ```env
+   SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
+   DEPLOYER_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
+   BLOCKCHAIN_NETWORK=sepolia
+   BLOCKCHAIN_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
+   CHAIN_ID=11155111
+   BLOCKCHAIN_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
+   ```
+3. Deploy:
+   ```powershell
+   npm run deploy:sepolia
+   ```
