@@ -1,0 +1,142 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Blockchain-Based Certificate Generation & Verification API",
+    "description": "REST API documentation for college event certificate issuance, Canva-based templates, PDF hashing, smart contract integration, and public verification.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:4000/api/v1",
+      "description": "Local Development Server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "paths": {
+    "/auth/login": {
+      "post": {
+        "summary": "Authenticate user (Admin / Teacher)",
+        "tags": ["Authentication"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": { "type": "string", "example": "admin@college.edu" },
+                  "password": { "type": "string", "example": "Admin@12345" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Session tokens returned" },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "summary": "Current authenticated user profile",
+        "tags": ["Authentication"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "Profile details" } }
+      }
+    },
+    "/events": {
+      "get": {
+        "summary": "List college events",
+        "tags": ["Events"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "List of events" } }
+      },
+      "post": {
+        "summary": "Create a college event",
+        "tags": ["Events"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "201": { "description": "Event created" } }
+      }
+    },
+    "/templates": {
+      "get": {
+        "summary": "List certificate templates",
+        "tags": ["Templates"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "List of templates" } }
+      }
+    },
+    "/certificates": {
+      "get": {
+        "summary": "List certificates with status and transaction hash",
+        "tags": ["Certificates"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "200": { "description": "List of certificates" } }
+      },
+      "post": {
+        "summary": "Issue a single certificate and register on blockchain",
+        "tags": ["Certificates"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "201": { "description": "Certificate issued and blockchain transaction confirmed" } }
+      }
+    },
+    "/certificates/bulk": {
+      "post": {
+        "summary": "Issue bulk certificates via CSV upload or JSON list",
+        "tags": ["Certificates"],
+        "security": [{ "BearerAuth": [] }],
+        "responses": { "201": { "description": "Batch processed with per-row statuses" } }
+      }
+    },
+    "/certificates/{certificateId}/pdf": {
+      "get": {
+        "summary": "Download generated certificate PDF",
+        "tags": ["Certificates"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "certificateId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Certificate PDF file" } }
+      }
+    },
+    "/certificates/{certificateId}/revoke": {
+      "post": {
+        "summary": "Revoke an issued certificate on-chain and off-chain",
+        "tags": ["Certificates"],
+        "security": [{ "BearerAuth": [] }],
+        "parameters": [{ "name": "certificateId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Certificate revoked" } }
+      }
+    },
+    "/verify/{certificateId}": {
+      "get": {
+        "summary": "Public verification of certificate by ID (No auth required)",
+        "tags": ["Public Verification"],
+        "parameters": [{ "name": "certificateId", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": {
+          "200": { "description": "Certificate VERIFIED with blockchain details" },
+          "404": { "description": "NOT_FOUND" },
+          "410": { "description": "REVOKED" }
+        }
+      }
+    },
+    "/verify/document": {
+      "post": {
+        "summary": "Public verification of certificate by uploading PDF (Detects tampering)",
+        "tags": ["Public Verification"],
+        "responses": {
+          "200": { "description": "Authentic and matches blockchain hash" },
+          "422": { "description": "HASH_MISMATCH / Tampered PDF" }
+        }
+      }
+    }
+  }
+}

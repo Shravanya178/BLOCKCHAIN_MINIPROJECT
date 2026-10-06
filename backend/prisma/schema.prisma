@@ -1,0 +1,301 @@
+// Prisma schema for the Certificate Registry backend.
+// The database stores application metadata and transaction *tracking*.
+// The CertificateRegistry smart contract is the authoritative source for
+// registration and revocation state; verification always reads the chain.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+}
+
+enum EventStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TemplateCategory {
+  PARTICIPATION
+  ACHIEVEMENT
+  WORKSHOP
+  TECHNICAL
+  OTHER
+}
+
+enum CertificateStatus {
+  PENDING
+  PDF_GENERATED
+  SUBMITTED_TO_BLOCKCHAIN
+  CONFIRMED
+  FAILED
+  REVOKED
+}
+
+enum BatchSource {
+  SINGLE
+  CSV
+}
+
+enum BatchStatus {
+  PROCESSING
+  COMPLETED
+  PARTIALLY_FAILED
+  FAILED
+}
+
+enum TxType {
+  REGISTER
+  REVOKE
+}
+
+enum TxStatus {
+  SUBMITTED
+  CONFIRMED
+  REVERTED
+  DROPPED
+  FAILED
+}
+
+model User {
+  id              String    @id @default(uuid()) @db.Uuid
+  email           String    @unique
+  name            String
+  passwordHash    String
+  role            Role      @default(TEACHER)
+  designation     String?
+  canCreateEvents Boolean   @default(true)
+  canRevoke       Boolean   @default(false)
+  isActive        Boolean   @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  refreshTokens       RefreshToken[]
+  eventsCreated       Event[]               @relation("EventCreatedBy")
+  eventsIssuing       Event[]               @relation("EventIssuer")
+  templatesCreated    CertificateTemplate[]
+  batchesCreated      IssuanceBatch[]
+  certificatesIssued  Certificate[]         @relation("CertificateIssuedBy")
+  certificatesRevoked Certificate[]         @relation("CertificateRevokedBy")
+  auditLogs           AuditLog[]
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Event {
+  id                String      @id @default(uuid()) @db.Uuid
+  name              String
+  description       String?
+  eventDate         DateTime    @db.Date
+  endDate           DateTime?   @db.Date
+  venue             String?
+  organizingBody    String
+  institutionName   String
+  signatoryName     String?
+  signatoryTitle    String?
+  status            EventStatus @default(ACTIVE)
+  createdById       String      @db.Uuid
+  issuerId          String      @db.Uuid
+  defaultTemplateId String?     @db.Uuid
+  archivedAt        DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  createdBy       User                 @relation("EventCreatedBy", fields: [createdById], references: [id])
+  issuer          User                 @relation("EventIssuer", fields: [issuerId], references: [id])
+  defaultTemplate CertificateTemplate? @relation(fields: [defaultTemplateId], references: [id])
+  certificates    Certificate[]
+  batches         IssuanceBatch[]
+
+  @@index([status])
+  @@index([eventDate])
+  @@index([createdById])
+  @@index([issuerId])
+}
+
+// A template is a background design exported from Canva (PNG/JPEG) plus a
+// `layout` JSON describing where each dynamic field is overlaid (fractional
+// 0..1 coordinates of the page). The backend never designs certificates itself.
+model CertificateTemplate {
+  id                 String           @id @default(uuid()) @db.Uuid
+  key                String           @unique
+  name               String
+  description        String?
+  category           TemplateCategory
+  orientation        String           @default("landscape")
+  backgroundKey      String?
+  backgroundMimeType String?
+  backgroundSha256   String?
+  layout             Json
+  isActive           Boolean          @default(true)
+  version            Int              @default(1)
+  createdById        String?          @db.Uuid
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  createdBy    User?           @relation(fields: [createdById], references: [id])
+  events       Event[]
+  certificates Certificate[]
+  batches      IssuanceBatch[]
+
+  @@index([category])
+  @@index([isActive])
+}
+
+model Recipient {
+  id                String   @id @default(uuid()) @db.Uuid
+  fullName          String
+  studentIdentifier String?  @unique
+  email             String?
+  department        String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  certificates Certificate[]
+
+  @@index([fullName])
+}
+
+model IssuanceBatch {
+  id               String      @id @default(uuid()) @db.Uuid
+  eventId          String      @db.Uuid
+  templateId       String      @db.Uuid
+  createdById      String      @db.Uuid
+  source           BatchSource
+  idempotencyKey   String?     @unique
+  originalFilename String?
+  totalRows        Int
+  acceptedRows     Int
+  rejectedRows     Int
+  rowErrors        Json        @default("[]")
+  status           BatchStatus @default(PROCESSING)
+  startedAt        DateTime    @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  event        Event               @relation(fields: [eventId], references: [id])
+  template     CertificateTemplate @relation(fields: [templateId], references: [id])
+  createdBy    User                @relation(fields: [createdById], references: [id])
+  certificates Certificate[]
+
+  @@index([eventId])
+  @@index([createdById])
+}
+
+model Certificate {
+  id                String            @id @default(uuid()) @db.Uuid
+  certificateId     String            @unique
+  eventId           String            @db.Uuid
+  recipientId       String            @db.Uuid
+  templateId        String            @db.Uuid
+  batchId           String?           @db.Uuid
+  issuedById        String            @db.Uuid
+  recipientName     String
+  studentIdentifier String?
+  certificateTitle  String
+  achievement       String?
+  issueDate         DateTime          @db.Date
+  status            CertificateStatus @default(PENDING)
+  documentHash      String?           @unique
+  storageKey        String?
+  fileSizeBytes     Int?
+  pdfGeneratedAt    DateTime?
+  verificationUrl   String
+  chainId           Int?
+  networkName       String?
+  contractAddress   String?
+  txHash            String?
+  blockNumber       Int?
+  registeredAt      DateTime?
+  revokedAt         DateTime?
+  revocationReason  String?
+  revokedById       String?           @db.Uuid
+  revocationTxHash  String?
+  lastError         String?
+  attempts          Int               @default(0)
+  rowNumber         Int?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  event        Event                   @relation(fields: [eventId], references: [id])
+  recipient    Recipient               @relation(fields: [recipientId], references: [id])
+  template     CertificateTemplate     @relation(fields: [templateId], references: [id])
+  batch        IssuanceBatch?          @relation(fields: [batchId], references: [id])
+  issuedBy     User                    @relation("CertificateIssuedBy", fields: [issuedById], references: [id])
+  revokedBy    User?                   @relation("CertificateRevokedBy", fields: [revokedById], references: [id])
+  transactions BlockchainTransaction[]
+
+  // One certificate per student per event (duplicate-issuance protection).
+  @@unique([eventId, recipientId])
+  @@index([status])
+  @@index([batchId])
+  @@index([eventId])
+  @@index([issuedById])
+}
+
+model BlockchainTransaction {
+  id              String    @id @default(uuid()) @db.Uuid
+  certificateId   String    @db.Uuid
+  type            TxType
+  status          TxStatus
+  txHash          String?   @unique
+  chainId         Int
+  networkName     String
+  contractAddress String
+  fromAddress     String?
+  nonce           Int?
+  blockNumber     Int?
+  gasUsed         String?
+  errorCode       String?
+  errorMessage    String?
+  submittedAt     DateTime?
+  confirmedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  certificate Certificate @relation(fields: [certificateId], references: [id], onDelete: Cascade)
+
+  @@index([certificateId])
+  @@index([status])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @db.Uuid
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@index([action])
+}
