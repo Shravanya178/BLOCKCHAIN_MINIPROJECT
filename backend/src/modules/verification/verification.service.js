@@ -5,6 +5,7 @@ const AppError = require('../../utils/AppError');
 const logger = require('../../utils/logger');
 const { sha256Hex, hashesEqual } = require('../../services/hashing.service');
 const blockchainService = require('../blockchain/blockchain.service');
+const pinata = require('../../services/pinata.service');
 
 /**
  * Public ID-based verification.
@@ -141,6 +142,12 @@ async function verifyCertificateById(certificateId) {
         txHash: dbCert.txHash,
         blockNumber: dbCert.blockNumber,
       },
+      ipfs: dbCert.storageKey?.startsWith('ipfs://')
+        ? {
+            cid: dbCert.storageKey.replace('ipfs://', ''),
+            gatewayUrl: pinata.getGatewayUrl(dbCert.storageKey.replace('ipfs://', '')),
+          }
+        : null,
     },
   };
 }
@@ -227,6 +234,12 @@ async function verifyDocument(pdfBuffer) {
         registeredAt: new Date(chainData.issuedAt * 1000),
         txHash: dbCert.txHash,
       },
+      ipfs: dbCert.storageKey?.startsWith('ipfs://')
+        ? {
+            cid: dbCert.storageKey.replace('ipfs://', ''),
+            gatewayUrl: pinata.getGatewayUrl(dbCert.storageKey.replace('ipfs://', '')),
+          }
+        : null,
     },
   };
 }

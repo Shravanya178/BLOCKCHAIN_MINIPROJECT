@@ -9,6 +9,7 @@ const prisma = require('./config/prisma');
 const { apiLimiter } = require('./middleware/rateLimiters');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
 const blockchainService = require('./modules/blockchain/blockchain.service');
+const pinata = require('./services/pinata.service');
 
 // Routes
 const authRoutes = require('./modules/auth/auth.routes');
@@ -82,6 +83,8 @@ app.get('/ready', async (_req, res) => {
       blockchainRpc: chainStatus.reachable ? 'up' : 'down',
       blockchainDetails: chainStatus,
       contractAddress: blockchainService.resolveContractAddress() || 'not_configured',
+      storageDriver: config.storage.driver,
+      ipfs: pinata.isConfigured() ? 'configured' : 'disabled',
     },
   });
 });

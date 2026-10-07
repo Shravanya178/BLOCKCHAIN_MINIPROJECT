@@ -39,8 +39,10 @@ const schema = z.object({
   TX_TIMEOUT_MS: int(60000),
   RPC_TIMEOUT_MS: int(10000),
 
-  STORAGE_DRIVER: z.enum(['local']).default('local'),
+  STORAGE_DRIVER: z.enum(['local', 'pinata']).default('local'),
   STORAGE_DIR: z.string().default('./generated/certificates'),
+  PINATA_JWT: optionalString,
+  PINATA_GATEWAY: z.string().default('gateway.pinata.cloud'),
   MAX_CSV_SIZE_BYTES: int(1024 * 1024),
   MAX_CSV_ROWS: int(200),
   MAX_PDF_UPLOAD_BYTES: int(5 * 1024 * 1024),
@@ -90,6 +92,10 @@ const config = {
   storage: {
     driver: env.STORAGE_DRIVER,
     dir: path.resolve(backendRoot, env.STORAGE_DIR),
+  },
+  pinata: {
+    jwt: env.PINATA_JWT,
+    gateway: env.PINATA_GATEWAY,
   },
   limits: {
     csvBytes: env.MAX_CSV_SIZE_BYTES,

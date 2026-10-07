@@ -52,8 +52,72 @@ class LocalStorage {
   }
 }
 
+class PinataStorage {
+  constructor(rootDir) {
+    this.localCache = new LocalStorage(rootDir);
+    this.pinata = require('./pinata.service');
+  }
+
+  /**
+   * Saves to local disk cache AND pins to IPFS via Pinata.
+   */
+  async save(key, buffer) {
+    // 1. Keep a local file cache
+    await this.localCache.save(key, buffer);
+
+    // 2. Upload to Pinata IPFS
+    const fileName = path.basename(key);
+    const result = await this.pinata.uploadFile(buffer, fileName, { storageKey: key });
+
+    return {
+      key: `ipfs://${result.ipfsHash}`,
+      ipfsHash: result.ipfsHash,
+      ipfsUrl: result.ipfsUrl,
+      size: buffer.length,
+    };
+  }
+
+  async read(key) {
+    // If it's a local key or cached locally
+    if (await this.localCache.exists(key)) {
+      return this.localCache.read(key);
+    }
+
+    const ipfsHash = key.replace(/^ipfs:\/\//, '');
+    const url = this.pinata.getGatewayUrl(ipfsHash);
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to fetch from IPFS gateway (${res.status})`);
+    }
+    const arrayBuffer = await res.arrayBuffer();
+    return Buffer.from(arrayBuffer);
+  }
+
+  async exists(key) {
+    if (await this.localCache.exists(key)) return true;
+    try {
+      const ipfsHash = key.replace(/^ipfs:\/\//, '');
+      const url = this.pinata.getGatewayUrl(ipfsHash);
+      const res = await fetch(url, { method: 'HEAD' });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async remove(key) {
+    if (await this.localCache.exists(key)) {
+      await this.localCache.remove(key);
+    }
+    const ipfsHash = key.replace(/^ipfs:\/\//, '');
+    await this.pinata.unpin(ipfsHash);
+  }
+}
+
 function createStorage() {
   switch (config.storage.driver) {
+    case 'pinata':
+      return new PinataStorage(config.storage.dir);
     case 'local':
     default:
       return new LocalStorage(config.storage.dir);
@@ -62,3 +126,4 @@ function createStorage() {
 
 module.exports = createStorage();
 module.exports.LocalStorage = LocalStorage;
+module.exports.PinataStorage = PinataStorage;

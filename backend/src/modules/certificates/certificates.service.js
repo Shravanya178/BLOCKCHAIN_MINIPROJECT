@@ -76,13 +76,13 @@ async function generateAndStorePdf({ certificate, event, template, issuerUser })
   });
 
   const documentHash = sha256Hex(pdfBuffer);
-  const storageKey = `certificates/${event.id}/${certificate.certificateId}.pdf`;
+  const targetKey = `certificates/${event.id}/${certificate.certificateId}.pdf`;
 
-  await storage.save(storageKey, pdfBuffer);
+  const saved = await storage.save(targetKey, pdfBuffer);
 
   return {
     documentHash,
-    storageKey,
+    storageKey: saved?.key || targetKey,
     fileSizeBytes: pdfBuffer.length,
     verificationUrl,
   };

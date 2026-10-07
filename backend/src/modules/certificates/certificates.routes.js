@@ -9,6 +9,7 @@ const { csvUpload } = require('../../middleware/upload');
 const prisma = require('../../config/prisma');
 const AppError = require('../../utils/AppError');
 const storage = require('../../services/storage.service');
+const pinata = require('../../services/pinata.service');
 const { paginationSchema, toPrisma, meta } = require('../../utils/pagination');
 const { isUuid, dateOnly } = require('../../validators/common');
 const { parseRecipientCsv } = require('./csv.parser');
@@ -114,7 +115,19 @@ router.get(
       throw AppError.forbidden('You do not have access to view this certificate');
     }
 
-    res.json({ success: true, data: cert });
+    const ipfsHash = cert.storageKey?.startsWith('ipfs://')
+      ? cert.storageKey.replace('ipfs://', '')
+      : null;
+    const ipfsUrl = ipfsHash ? pinata.getGatewayUrl(ipfsHash) : null;
+
+    res.json({
+      success: true,
+      data: {
+        ...cert,
+        ipfsHash,
+        ipfsUrl,
+      },
+    });
   }),
 );
 
@@ -138,6 +151,13 @@ router.get(
     const pdfBuffer = await storage.read(cert.storageKey);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cert.certificateId}.pdf"`);
+
+    if (cert.storageKey?.startsWith('ipfs://')) {
+      const cid = cert.storageKey.replace('ipfs://', '');
+      res.setHeader('X-IPFS-CID', cid);
+      res.setHeader('X-IPFS-Gateway-Url', pinata.getGatewayUrl(cid));
+    }
+
     res.send(pdfBuffer);
   }),
 );
