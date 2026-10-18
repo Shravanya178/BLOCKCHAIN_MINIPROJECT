@@ -1,0 +1,41 @@
+name: CI - Smart Contracts & Backend Build
+
+on:
+  push:
+    branches: [ main, Arnav, develop ]
+  pull_request:
+    branches: [ main, Arnav ]
+
+jobs:
+  contract-tests:
+    name: Compile & Test Smart Contracts
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile Solidity contracts & Export ABI
+        run: |
+          npx hardhat compile
+          node scripts/export-abi.js
+
+      - name: Run Hardhat unit tests
+        run: npx hardhat test
+
+      - name: Generate Prisma Client
+        run: npx prisma generate

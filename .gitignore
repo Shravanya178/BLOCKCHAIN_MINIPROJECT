@@ -1,0 +1,57 @@
+# =====================================================================
+# Git Ignore Configuration
+# Ensures all local credentials, keys, and private data remain strictly local
+# while allowing redacted .env.example templates to be committed to GitHub.
+# =====================================================================
+
+# Environment variables & secrets (EVERY directory)
+.env
+.env.*
+*.env
+*.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Node dependencies
+node_modules/
+**/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend build output
+frontend/dist/
+frontend/dist-ssr/
+
+# Hardhat & Solidity artifacts
+backend/artifacts/
+backend/cache/
+backend/typechain-types/
+
+# Generated runtime and uploaded files
+backend/generated/*
+!backend/generated/.gitkeep
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/deployments/hardhat.json
+backend/deployments/localhost.json
+
+# Test coverage & reports
+coverage/
+**/coverage/
+
+# Operating System & Editor caches
+.DS_Store
+Thumbs.db
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.log
