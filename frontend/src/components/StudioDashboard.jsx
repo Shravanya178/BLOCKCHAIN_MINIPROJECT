@@ -361,10 +361,10 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
         <div className="studio-headline">
           <span className="badge badge-chain">
             <Layers size={13} />
-            <span>AUTHORITY ISSUANCE MATRIX</span>
+            <span>VESIT CERTIFICATE SERVICES</span>
           </span>
           <h2>Certificate Studio & Registry Vault</h2>
-          <p>Generate cryptographic certificates, render customized Canva layouts, and record SHA-256 hashes onto Ethereum.</p>
+          <p>Create events, prepare participant records and issue authenticated certificates.</p>
         </div>
 
         {/* Action Tabs Navigation */}
@@ -413,8 +413,8 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
       {activeSubTab === 'dashboard' && (
         <div className="glass-panel dashboard-metrics-grid">
-          <div className="metric-card"><span>Total Events</span><strong>{dashboardStats?.totalEvents ?? '—'}</strong></div>
-          <div className="metric-card"><span>Total Certificates</span><strong>{dashboardStats?.totalCertificates ?? '—'}</strong></div>
+          <div className="metric-card"><span>Total Events</span><strong>{dashboardStats?.totalEvents ?? 'N/A'}</strong></div>
+          <div className="metric-card"><span>Total Certificates</span><strong>{dashboardStats?.totalCertificates ?? 'N/A'}</strong></div>
           <div className="metric-card"><span>Confirmed On-Chain</span><strong>{statusCounts.CONFIRMED || 0}</strong></div>
           <div className="metric-card"><span>Revoked</span><strong>{statusCounts.REVOKED || 0}</strong></div>
           <div className="metric-card"><span>Failed</span><strong>{statusCounts.FAILED || 0}</strong></div>
@@ -461,7 +461,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                   required
                 >
                   {events.length === 0 ? (
-                    <option value="">No events loaded — Please log in as Teacher/Admin</option>
+                    <option value="">No events loaded. Please sign in as an organizer.</option>
                   ) : (
                     events.map(ev => (
                       <option key={ev.id} value={ev.id}>{ev.name} ({new Date(ev.eventDate).toLocaleDateString()})</option>
@@ -483,7 +483,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                   onChange={(e) => setSelectedTemplateId(e.target.value)}
                 >
                   {templates.length === 0 ? (
-                    <option value="">Canva Default Template (Excellence Landscape)</option>
+                    <option value="">Select a certificate template</option>
                   ) : (
                     templates.map(tm => (
                       <option key={tm.id} value={tm.id}>{tm.name} ({tm.category})</option>
@@ -688,7 +688,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
             </div>
             <button className="btn btn-secondary btn-sm" onClick={downloadSampleCsv}>
               <Download size={15} />
-              <span>Download Demo CSV</span>
+              <span>Download sample CSV</span>
             </button>
           </div>
 

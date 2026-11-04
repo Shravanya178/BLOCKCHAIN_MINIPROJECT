@@ -416,6 +416,177 @@
   }
 }
 
+/* Institutional layout refresh */
+.app-shell {
+  background: #fbfaff;
+}
+
+.navbar-container {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.96);
+  border-bottom: 1px solid #e4dfeb;
+  box-shadow: 0 2px 12px rgba(62, 42, 84, 0.05);
+}
+
+.navbar-inner {
+  max-width: 1440px;
+  min-height: 72px;
+  padding: 0 32px;
+}
+
+.navbar-brand {
+  gap: 10px;
+}
+
+.brand-logo-icon {
+  background: #8062a6;
+  border-radius: 9px;
+  width: 38px;
+  height: 38px;
+}
+
+.brand-title {
+  color: #302938;
+  letter-spacing: 0.04em;
+}
+
+.brand-subtitle {
+  color: #8d8494;
+  letter-spacing: 0.08em;
+}
+
+.gradient-text {
+  background: none;
+  color: #8062a6;
+  -webkit-text-fill-color: currentColor;
+}
+
+.navbar-nav {
+  gap: 4px;
+}
+
+.nav-link {
+  color: #665c70;
+  border-radius: 8px;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: #624784;
+  background: #f0eafe;
+}
+
+.system-pill,
+.wallet-pill,
+.user-chip {
+  background: #ffffff;
+  border-color: #e4dfeb;
+}
+
+.main-content-area {
+  max-width: 1280px;
+  padding-top: 44px;
+}
+
+.hub-hero {
+  max-width: 760px;
+  margin-bottom: 32px;
+}
+
+.hero-badge {
+  color: #624784;
+  background: #f0eafe;
+  border-color: #d7c9ed;
+}
+
+.hero-headline {
+  color: #302938;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+}
+
+.hero-description {
+  color: #665c70;
+}
+
+.metric-tag {
+  background: #ffffff;
+  border-color: #e4dfeb;
+  color: #665c70;
+}
+
+.glass-panel {
+  overflow: visible;
+}
+
+.verification-matrix-card {
+  box-shadow: 0 12px 30px rgba(62, 42, 84, 0.08);
+}
+
+.matrix-tabs-header {
+  background: #f7f3ff;
+}
+
+.matrix-tab {
+  color: #8d8494;
+}
+
+.matrix-tab.active {
+  color: #624784;
+  border-bottom-color: #8062a6;
+  background: #ffffff;
+}
+
+.input-field,
+select.input-field {
+  color: #302938;
+  background: #ffffff;
+  border-color: #d9d1e2;
+}
+
+.input-field:focus {
+  border-color: #8062a6;
+  box-shadow: 0 0 0 3px rgba(128, 98, 166, 0.12);
+}
+
+.dropzone-box {
+  background: #fbfaff;
+  border-color: #cfc4dc;
+}
+
+.dropzone-box:hover,
+.dropzone-box.dragging {
+  background: #f7f3ff;
+  border-color: #8062a6;
+}
+
+.footer-strip {
+  border-top-color: #e4dfeb;
+  background: #ffffff;
+}
+
+.footer-brand,
+.footer-copy {
+  color: #665c70;
+}
+
+@media (max-width: 1050px) {
+  .navbar-inner {
+    padding: 0 20px;
+  }
+
+  .navbar-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .navbar-container {
+    position: relative;
+  }
+}
+
 .metric-tag {
   display: flex;
   align-items: center;

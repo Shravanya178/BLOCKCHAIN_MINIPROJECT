@@ -92,7 +92,6 @@ export default function App() {
 
   return (
     <div className="app-root">
-      {/* Top Glass Navigation */}
       <Navbar 
         currentTab={currentTab}
         setCurrentTab={setCurrentTab}
@@ -105,7 +104,6 @@ export default function App() {
         systemStatus={systemStatus}
       />
 
-      {/* Main View Router */}
       <main className="main-content-area">
         {currentTab === 'verify' && (
           <VerificationHub systemStatus={systemStatus} />
@@ -132,12 +130,11 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer Strip */}
       <footer className="footer-strip">
         <div className="footer-content">
           <div className="footer-col">
-            <span className="footer-brand">CERTI<span className="gradient-text">CHAIN</span></span>
-            <p className="footer-copy">Cryptographic Document Registry & Verification Protocol. Built on Ethereum & IPFS.</p>
+            <span className="footer-brand">VESIT Certificate Management</span>
+            <p className="footer-copy">Digitally authenticated certificates for VES Institute of Technology.</p>
           </div>
           <div className="footer-col text-right">
             <div className="tech-tags mono">
@@ -146,7 +143,7 @@ export default function App() {
               <span>PRISMA</span>
               <span>PINATA IPFS</span>
             </div>
-            <p className="text-muted text-xs mt-1">Academic Mini-Project // Shravanya Andhale • Arnav Chaudhary • Karuna Jeswani • Nikhil Kadam</p>
+            <p className="text-muted text-xs mt-1">Secured with SHA-256, Ethereum and Pinata IPFS.</p>
           </div>
         </div>
       </footer>

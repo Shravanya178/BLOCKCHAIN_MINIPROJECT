@@ -129,14 +129,13 @@ export default function VerificationHub({ systemStatus }) {
       <div className="hub-hero">
         <div className="hero-badge">
           <Sparkles size={14} className="icon-cyan" />
-          <span>CRYPTOGRAPHIC VERIFICATION PROTOCOL</span>
+          <span>PUBLIC CERTIFICATE VERIFICATION</span>
         </div>
         <h1 className="hero-headline">
-          Instant & Immutable <span className="gradient-text">Certificate Verification</span>
+          Certificate Management and Verification
         </h1>
         <p className="hero-description">
-          Verify academic credentials directly against the Ethereum blockchain registry. 
-          No central intermediary can forge, alter, or falsify registered records.
+          Verify a VESIT certificate by its ID or by uploading the original PDF. No login or wallet is required.
         </p>
 
         {/* Live Metrics Ribbons */}
@@ -211,9 +210,8 @@ export default function VerificationHub({ systemStatus }) {
                 </button>
               </form>
 
-              {/* Quick Demo Pre-fill Links */}
               <div className="demo-links-row">
-                <span className="demo-label">Demo Test Cases:</span>
+                <span className="demo-label">Example format:</span>
                   <button 
                     type="button" 
                     className="demo-chip-btn"
@@ -224,7 +222,7 @@ export default function VerificationHub({ systemStatus }) {
                     }}
                   >
                     <Sparkles size={13} />
-                    <span>Try Minted Demo (CERT-2026-AZZMDDUK)</span>
+                    <span>CERT-2026-X8K9M3P2</span>
                   </button>
               </div>
             </div>
@@ -257,7 +255,7 @@ export default function VerificationHub({ systemStatus }) {
                 </h3>
                 <p className="dropzone-subtitle">
                   {uploadedFile 
-                    ? `File size: ${(uploadedFile.size / 1024).toFixed(1)} KB — In-browser SHA-256 computed`
+                    ? `File size: ${(uploadedFile.size / 1024).toFixed(1)} KB. In-browser SHA-256 computed`
                     : 'Upload the original certificate to test byte-by-byte integrity against the blockchain'}
                 </p>
 

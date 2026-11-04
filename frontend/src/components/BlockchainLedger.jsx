@@ -51,7 +51,7 @@ export default function BlockchainLedger() {
               <span>LIVE AUDIT STREAM</span>
             </span>
             <h2>Blockchain & Protocol Audit Stream</h2>
-            <p>Cryptographic chronological records of certificate minting, hash anchoring, and role events.</p>
+            <p>Chronological records of certificate registration, hash anchoring and role events.</p>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={fetchLogs} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'spin' : ''} />

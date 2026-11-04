@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, X, Sparkles, AlertCircle, Shield } from 'lucide-react';
+import { LogIn, X, AlertCircle, Shield } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function AuthModal({ isOpen, onClose, onLoginSuccess }) {
@@ -45,19 +45,17 @@ export default function AuthModal({ isOpen, onClose, onLoginSuccess }) {
         </div>
 
         <p className="modal-desc">
-          Sign in to access the Certificate Studio, configure Canva templates, issue credentials, and submit blockchain transactions.
+          Sign in to manage events, participants and certificate issuance.
         </p>
 
-        {/* Quick Demo Fill Buttons */}
         <div className="demo-credentials-strip">
-          <span className="demo-tip-label">Quick Demo Access:</span>
+          <span className="demo-tip-label">Quick account selection:</span>
           <div className="demo-btn-row">
             <button 
               type="button" 
               className="btn btn-secondary btn-sm"
               onClick={() => fillCredentials('teacher@college.edu', 'Teacher@12345')}
             >
-              <Sparkles size={13} />
               <span>Teacher Account</span>
             </button>
             <button 

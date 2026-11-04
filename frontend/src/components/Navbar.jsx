@@ -36,7 +36,7 @@ export default function Navbar({
           </div>
           <div className="brand-text">
             <span className="brand-title">CERTI<span className="gradient-text">CHAIN</span></span>
-            <span className="brand-subtitle">ETHEREUM PROTOCOL</span>
+            <span className="brand-subtitle">VESIT CERTIFICATE SERVICES</span>
           </div>
         </div>
 
@@ -47,7 +47,7 @@ export default function Navbar({
             onClick={() => setCurrentTab('verify')}
           >
             <ShieldCheck size={18} />
-            <span>Verification Hub</span>
+            <span>Verify Certificate</span>
           </button>
 
           <button 
@@ -55,7 +55,7 @@ export default function Navbar({
             onClick={() => setCurrentTab('studio')}
           >
             <Layers size={18} />
-            <span>Authority Studio</span>
+            <span>Certificate Studio</span>
             {user && <span className="nav-badge-dot" />}
           </button>
 
@@ -64,7 +64,7 @@ export default function Navbar({
             onClick={() => setCurrentTab('ledger')}
           >
             <FileText size={18} />
-            <span>Blockchain Ledger</span>
+            <span>Certificate Records</span>
           </button>
 
           <button 
@@ -72,7 +72,7 @@ export default function Navbar({
             onClick={() => setCurrentTab('contract')}
           >
             <Cpu size={18} />
-            <span>Smart Contract</span>
+            <span>Blockchain</span>
           </button>
         </nav>
 
