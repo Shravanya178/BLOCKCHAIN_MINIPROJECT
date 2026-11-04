@@ -65,7 +65,7 @@ describe('Full End-to-End API Integration', () => {
         .post('/api/v1/events')
         .set('Authorization', `Bearer ${teacherToken}`)
         .send({
-          name: 'TechBlitz 2026 CodeFest',
+          name: 'GENESIS 2.0',
           description: 'Inter-collegiate coding and algorithm challenge',
           eventDate: '2026-04-10',
           organizingBody: 'Computer Science Department',
@@ -77,7 +77,7 @@ describe('Full End-to-End API Integration', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.success).toBe(true);
-      expect(res.body.data.name).toBe('TechBlitz 2026 CodeFest');
+      expect(res.body.data.name).toBe('GENESIS 2.0');
       eventId = res.body.data.id;
     });
   });

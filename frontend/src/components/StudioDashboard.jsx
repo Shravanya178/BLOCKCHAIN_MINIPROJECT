@@ -6,6 +6,7 @@ import {
   FileSpreadsheet, 
   AlertCircle, 
   CheckCircle2, 
+  Copy,
   ExternalLink, 
   Download, 
   Trash2, 
@@ -14,12 +15,12 @@ import {
   Filter, 
   Layers, 
   Sparkles,
-  QrCode,
   Calendar,
   Award,
   User,
   Building,
-  BarChart3
+  BarChart3,
+  Lock
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
@@ -33,18 +34,25 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
   const [templates, setTemplates] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [dashboardStats, setDashboardStats] = useState(null);
+  const [studentAnalyticsSearch, setStudentAnalyticsSearch] = useState('');
+  const [eventAnalyticsSearch, setEventAnalyticsSearch] = useState('');
+  const [studentAnalyticsResults, setStudentAnalyticsResults] = useState([]);
+  const [eventAnalyticsResults, setEventAnalyticsResults] = useState([]);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templatePreviewUrl, setTemplatePreviewUrl] = useState('');
+  const [templatePreviewError, setTemplatePreviewError] = useState('');
+  const [copiedIdentifier, setCopiedIdentifier] = useState(null);
   
   // Single Certificate Form
   const [singleForm, setSingleForm] = useState({
-    studentName: 'Arnav Chaudhary',
-    studentId: 'CS-2026-002',
+    studentName: '',
+    studentId: '',
     teamName: '',
     projectTitle: '',
     position: '',
-    achievement: 'Special Mention',
-    certificateTitle: 'Certificate of Excellence',
+    achievement: '',
+    certificateTitle: '',
   });
   const [isIssuingSingle, setIsIssuingSingle] = useState(false);
   const [issuedSingleResult, setIssuedSingleResult] = useState(null);
@@ -63,6 +71,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [vaultLoading, setVaultLoading] = useState(false);
+  const [vaultError, setVaultError] = useState(null);
 
   // Revocation modal
   const [revokingCert, setRevokingCert] = useState(null);
@@ -71,14 +80,14 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
   // New Event Form
   const [eventForm, setEventForm] = useState({
-    name: 'HackVenture 2026 Hackathon',
-    description: 'National 36-hour blockchain and AI hackathon',
+    name: '',
+    description: '',
     eventDate: new Date().toISOString().split('T')[0],
-    organizingBody: 'Department of Computer Engineering',
-    institutionName: 'Institute of Engineering and Technology',
-    signatoryName: 'Dr. R. K. Sharma',
-    signatoryTitle: 'Dean of Academic Affairs',
-    category: 'HACKATHONS',
+    organizingBody: '',
+    institutionName: '',
+    signatoryName: '',
+    signatoryTitle: '',
+    category: 'TECHNICAL_WORKSHOPS',
     certificateType: 'PARTICIPATION',
     validityPolicy: 'PERMANENT',
     validityDays: '',
@@ -105,6 +114,32 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
     loadInitialData();
   }, [user]);
 
+  useEffect(() => {
+    if (!user || !studentAnalyticsSearch.trim()) {
+      setStudentAnalyticsResults([]);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      api.getCertificates({ studentName: studentAnalyticsSearch.trim(), limit: 100 })
+        .then((res) => setStudentAnalyticsResults(res.data?.items || res.data || []))
+        .catch(() => setStudentAnalyticsResults([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [studentAnalyticsSearch, user]);
+
+  useEffect(() => {
+    if (!user || !eventAnalyticsSearch.trim()) {
+      setEventAnalyticsResults([]);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      api.getCertificates({ eventName: eventAnalyticsSearch.trim(), limit: 100 })
+        .then((res) => setEventAnalyticsResults(res.data?.items || res.data || []))
+        .catch(() => setEventAnalyticsResults([]));
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [eventAnalyticsSearch, user]);
+
   const loadInitialData = async () => {
     try {
       const [eventsRes, templatesRes] = await Promise.all([
@@ -120,6 +155,16 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
       if (evList.length > 0 && (!selectedEventId || !evList.some(e => e.id === selectedEventId))) {
         setSelectedEventId(evList[0].id);
+        const type = String(evList[0].certificateType || '').toUpperCase();
+        const category = String(evList[0].category || '').toUpperCase();
+        const preferred = tmList.find((template) => {
+          const name = template.name.toLowerCase();
+          if (['WINNER', 'RUNNER_UP', 'FINALIST', 'EXCELLENCE', 'BEST_PAPER', 'MERIT', 'ACHIEVEMENT'].includes(type)) return name.includes('achievement');
+          if (['RESOURCE_PERSON', 'SPEAKER', 'COORDINATOR', 'VOLUNTEER_APPRECIATION'].includes(type)) return name.includes('appreciation');
+          if (category.includes('HACK') || category.includes('SPORT') || category.includes('CULTURAL')) return name.includes('competition');
+          return name.includes('participation');
+        });
+        if (preferred) setSelectedTemplateId(preferred.id);
       }
       if (tmList.length > 0 && (!selectedTemplateId || !tmList.some(t => t.id === selectedTemplateId))) {
         setSelectedTemplateId(tmList[0].id);
@@ -134,16 +179,157 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
   const loadCertificates = async () => {
     setVaultLoading(true);
+    setVaultError(null);
     try {
-      const res = await api.getCertificates({ limit: 50 });
+      const res = await api.getCertificates({ limit: 100 });
       const certList = Array.isArray(res.data) ? res.data : (res.data?.items || []);
       setCertificates(certList);
     } catch (err) {
       console.warn('Failed to load certificates:', err);
+      setVaultError(err.message || 'Failed to load certificate records');
     } finally {
       setVaultLoading(false);
     }
   };
+
+  const copyIdentifier = async (value, label) => {
+    if (!value) return;
+    await navigator.clipboard.writeText(value);
+    setCopiedIdentifier(label);
+    window.setTimeout(() => setCopiedIdentifier(null), 1600);
+  };
+
+  const uniqueEvents = React.useMemo(() => {
+    const map = new Map();
+    for (const ev of events) {
+      if (!ev || !ev.name) continue;
+      const name = ev.name.trim();
+      if (name.toLowerCase().includes('techblitz')) continue;
+      if (!map.has(name.toLowerCase())) {
+        map.set(name.toLowerCase(), ev);
+      }
+    }
+    return Array.from(map.values());
+  }, [events]);
+
+  const uniqueEventDistribution = React.useMemo(() => {
+    const map = new Map();
+    for (const item of (dashboardStats?.eventDistribution || [])) {
+      if (!item || !item.eventName) continue;
+      const name = item.eventName.trim();
+      if (name.toLowerCase().includes('techblitz')) continue;
+      if (map.has(name.toLowerCase())) {
+        map.get(name.toLowerCase()).certificates += item.certificates;
+      } else {
+        map.set(name.toLowerCase(), { ...item, eventName: name });
+      }
+    }
+    return Array.from(map.values());
+  }, [dashboardStats?.eventDistribution]);
+
+  const selectedEvent = uniqueEvents.find((event) => event.id === selectedEventId);
+  const selectedTemplate = templates.find((template) => template.id === selectedTemplateId);
+  const preferredTemplateForEvent = (event) => {
+    if (!event) return null;
+    const type = String(event.certificateType || '').toUpperCase();
+    const category = String(event.category || '').toUpperCase();
+    if (['WINNER', 'RUNNER_UP', 'FINALIST', 'EXCELLENCE', 'BEST_PAPER', 'MERIT', 'ACHIEVEMENT'].includes(type)) {
+      return templates.find((template) => template.name.toLowerCase().includes('achievement'));
+    }
+    if (['RESOURCE_PERSON', 'SPEAKER', 'COORDINATOR', 'VOLUNTEER_APPRECIATION'].includes(type)) {
+      return templates.find((template) => template.name.toLowerCase().includes('appreciation'));
+    }
+    if (category.includes('HACK') || category.includes('SPORT') || category.includes('CULTURAL')) {
+      return templates.find((template) => template.name.toLowerCase().includes('competition'));
+    }
+    return templates.find((template) => template.name.toLowerCase().includes('participation'));
+  };
+  const handleEventChange = (eventId) => {
+    setSelectedEventId(eventId);
+    const event = uniqueEvents.find((item) => item.id === eventId) || events.find((item) => item.id === eventId);
+    const preferred = preferredTemplateForEvent(event);
+    if (preferred) setSelectedTemplateId(preferred.id);
+  };
+
+  useEffect(() => {
+    let active = true;
+    let objectUrl;
+    if (!selectedTemplateId || !user) {
+      setTemplatePreviewUrl('');
+      setTemplatePreviewError('');
+      return undefined;
+    }
+    setTemplatePreviewUrl('');
+    setTemplatePreviewError('');
+    const timer = window.setTimeout(() => {
+      api.getTemplatePreviewBlob(selectedTemplateId, {
+        studentName: singleForm.studentName,
+        studentId: singleForm.studentId,
+        teamName: singleForm.teamName,
+        projectTitle: singleForm.projectTitle,
+        position: singleForm.position,
+        achievement: singleForm.achievement,
+        certificateTitle: singleForm.certificateTitle,
+        certificateType: selectedEvent?.certificateType,
+        department: selectedEvent?.department,
+        eventName: selectedEvent?.name,
+        eventDate: selectedEvent?.eventDate,
+        eventEndDate: selectedEvent?.endDate,
+        validityPolicy: selectedEvent?.validityPolicy,
+        validityDays: selectedEvent?.validityDays,
+        validUntil: selectedEvent?.validUntil,
+        venue: selectedEvent?.venue,
+        organizingBody: selectedEvent?.organizingBody,
+        institutionName: selectedEvent?.institutionName,
+        issuerName: selectedEvent?.issuer?.name,
+        signatoryName: selectedEvent?.signatoryName,
+        signatoryTitle: selectedEvent?.signatoryTitle,
+        signatoryDesignation: selectedEvent?.signatoryTitle,
+      }).then((blob) => {
+        if (active) {
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
+          objectUrl = URL.createObjectURL(blob);
+          setTemplatePreviewUrl(objectUrl);
+        }
+      }).catch((error) => {
+        if (active) {
+          setTemplatePreviewUrl('');
+          setTemplatePreviewError(`Preview failed: ${error.message}`);
+        }
+      });
+    }, 200);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [
+    selectedTemplateId,
+    selectedEventId,
+    singleForm.studentName,
+    singleForm.studentId,
+    singleForm.teamName,
+    singleForm.projectTitle,
+    singleForm.position,
+    singleForm.achievement,
+    singleForm.certificateTitle,
+    selectedEvent?.certificateType,
+    selectedEvent?.department,
+    selectedEvent?.name,
+    selectedEvent?.eventDate,
+    selectedEvent?.endDate,
+    selectedEvent?.validityPolicy,
+    selectedEvent?.validityDays,
+    selectedEvent?.validUntil,
+    selectedEvent?.venue,
+    selectedEvent?.organizingBody,
+    selectedEvent?.institutionName,
+    selectedEvent?.issuer?.name,
+    selectedEvent?.signatoryName,
+    selectedEvent?.signatoryTitle,
+    user
+  ]);
 
   // Issue Single Certificate
   const handleIssueSingle = async (e) => {
@@ -152,19 +338,13 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       onRequireLogin();
       return;
     }
-    const targetEventId = selectedEventId || events[0]?.id;
-    if (!targetEventId) {
-      setSingleError('Please select or create an event first.');
-      return;
-    }
-
     setIsIssuingSingle(true);
     setSingleError(null);
     setIssuedSingleResult(null);
 
     try {
       const payload = {
-        eventId: targetEventId,
+        eventId: selectedEventId,
         templateId: selectedTemplateId || templates[0]?.id || undefined,
         studentName: singleForm.studentName,
         studentId: singleForm.studentId || undefined,
@@ -213,12 +393,14 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       setParsedRows(validateBulkRows(recipients.map((recipient) => ({
         row: recipient.rowNumber,
         name: recipient.studentName || '',
+        email: recipient.email || '',
         id: recipient.studentId || '',
+        department: recipient.department || '',
+        certificateTitle: recipient.certificateTitle || '',
         teamName: recipient.teamName || '',
         projectTitle: recipient.projectTitle || '',
         position: recipient.position || '',
         achievement: recipient.achievement || '',
-        certificateTitle: recipient.certificateTitle || '',
       }))));
       setBulkRowsEdited(false);
     } catch (err) {
@@ -235,7 +417,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       return;
     }
     if (!csvFile || !selectedEventId) {
-      setBulkError('Please select an event and upload a CSV or XLSX file.');
+      setBulkError('Select an existing event and upload a CSV or XLSX file.');
       return;
     }
     if (parsedRows.some((row) => row.invalid)) {
@@ -257,12 +439,14 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
         formData.append('recipients', JSON.stringify(parsedRows.map((row) => ({
           rowNumber: row.row,
           studentName: row.name.trim(),
+          email: row.email.trim() || null,
           studentId: row.id.trim() || null,
+          department: row.department.trim() || null,
+          certificateTitle: row.certificateTitle.trim() || null,
           teamName: row.teamName.trim() || null,
           projectTitle: row.projectTitle.trim() || null,
           position: row.position.trim() || null,
           achievement: row.achievement.trim() || null,
-          certificateTitle: row.certificateTitle?.trim() || null,
         }))));
         formData.append('originalFilename', csvFile.name);
       } else {
@@ -282,7 +466,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
   // Download Sample CSV template
   const downloadSampleCsv = () => {
-    const csvContent = 'student_name,student_id,team_name,project_title,position,achievement\n"Arnav Chaudhary","CS-2026-001","","","","First Place Winner"\n"Shravanya Andhale","CS-2026-002","","","","Special Mention"\n"Karuna Jeswani","CS-2026-003","","","","Runner Up"\n"Nikhil Kadam","CS-2026-004","","","","Finalist"';
+    const csvContent = 'student_name,email,student_id,department,certificate_title,team_name,project_title,position\n';
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -345,13 +529,13 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
     const matchesSearch = !searchQuery || 
       c.recipientName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.certificateId?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.studentIdentifier?.toLowerCase().includes(searchQuery.toLowerCase());
+      c.studentIdentifier?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.event?.name?.toLowerCase().includes(searchQuery.toLowerCase());
     
-    const matchesStatus = statusFilter === 'ALL' || c.status === statusFilter;
+    const matchesStatus = statusFilter === 'ALL' || (c.lifecycleStatus || c.status) === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const selectedEvent = events.find(e => e.id === selectedEventId) || events[0];
   const statusCounts = dashboardStats?.statusCounts || {};
 
   return (
@@ -395,7 +579,10 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
           <button 
             className={`subnav-btn ${activeSubTab === 'vault' ? 'active' : ''}`}
-            onClick={() => setActiveSubTab('vault')}
+            onClick={() => {
+              setActiveSubTab('vault');
+              loadCertificates();
+            }}
           >
             <FileCheck2 size={16} />
             <span>Registry Vault ({certificates.length})</span>
@@ -421,11 +608,29 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
           <div className="metric-card"><span>Pending</span><strong>{(statusCounts.PENDING || 0) + (statusCounts.PDF_GENERATED || 0) + (statusCounts.SUBMITTED_TO_BLOCKCHAIN || 0)}</strong></div>
           <div className="dashboard-event-list">
             <h3 className="card-heading"><BarChart3 size={20} /> Event distribution</h3>
-            {(dashboardStats?.eventDistribution || []).map((event) => (
-              <div className="dashboard-event-row" key={event.eventId}>
-                <span>{event.eventName}</span><strong>{event.certificates}</strong>
-              </div>
-            ))}
+            {uniqueEventDistribution.length === 0 ? (
+              <div className="text-muted text-sm py-3">No event distribution data recorded yet.</div>
+            ) : (
+              uniqueEventDistribution.map((event) => (
+                <div className="dashboard-event-row" key={event.eventId || event.eventName}>
+                  <span>{event.eventName}</span><strong>{event.certificates}</strong>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="analytics-search-grid">
+            <div className="analytics-search-card">
+              <label className="field-label">Search certificates by student</label>
+              <input className="input-field" value={studentAnalyticsSearch} onChange={(e) => setStudentAnalyticsSearch(e.target.value)} placeholder="Student name" />
+              <strong>{studentAnalyticsResults.length}</strong>
+              <span>matching certificates</span>
+            </div>
+            <div className="analytics-search-card">
+              <label className="field-label">Search certificates by event</label>
+              <input className="input-field" value={eventAnalyticsSearch} onChange={(e) => setEventAnalyticsSearch(e.target.value)} placeholder="Event name" />
+              <strong>{eventAnalyticsResults.length}</strong>
+              <span>matching certificates</span>
+            </div>
           </div>
         </div>
       )}
@@ -454,21 +659,18 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     <span>Reload Events</span>
                   </button>
                 </div>
-                <select 
+                <select
                   className="input-field"
                   value={selectedEventId}
-                  onChange={(e) => setSelectedEventId(e.target.value)}
+                  onChange={(e) => handleEventChange(e.target.value)}
                   required
                 >
-                  {events.length === 0 ? (
-                    <option value="">No events loaded. Please sign in as an organizer.</option>
-                  ) : (
-                    events.map(ev => (
-                      <option key={ev.id} value={ev.id}>{ev.name} ({new Date(ev.eventDate).toLocaleDateString()})</option>
-                    ))
-                  )}
+                  <option value="">Select an event created in Event Management</option>
+                  {uniqueEvents.map((event) => (
+                    <option key={event.id} value={event.id}>{event.name}</option>
+                  ))}
                 </select>
-                {events.length === 0 && (
+                {uniqueEvents.length === 0 && (
                   <p className="text-xs text-red mt-1">
                     No active events loaded. Sign in using Authority Login (Teacher or Admin) or click "Reload Events".
                   </p>
@@ -627,50 +829,24 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
           {/* Right Live Certificate Preview Column */}
           <div className="glass-panel live-preview-panel">
             <div className="preview-header">
-              <span className="preview-label">LIVE CANVA PREVIEW CANVAS</span>
-              <span className="badge badge-chain">VECTOR RENDER</span>
+              <span className="preview-label">SELECTED TEMPLATE PREVIEW</span>
+              <span className="badge badge-chain">{selectedTemplate?.name || 'Select a template'}</span>
             </div>
-
-            {/* Certificate Visualizer Frame */}
-            <div className="certificate-mockup-frame">
-              <div className="cert-border-outer">
-                <div className="cert-border-inner">
-                  <div className="cert-watermark-seal">
-                    <Award size={48} />
-                  </div>
-
-                  <div className="cert-header">
-                    <span className="cert-inst-name">{selectedEvent?.institutionName || 'INSTITUTE OF TECHNOLOGY'}</span>
-                    <span className="cert-doc-title">{singleForm.certificateTitle.toUpperCase()}</span>
-                  </div>
-
-                  <div className="cert-recipient-block">
-                    <span className="cert-awarded-text">THIS IS PROUDLY PRESENTED TO</span>
-                    <h2 className="cert-recipient-name">{singleForm.studentName || 'Student Name'}</h2>
-                    <span className="cert-student-id mono">{singleForm.studentId || 'ID-0000'}</span>
-                  </div>
-
-                  <div className="cert-body-block">
-                    <p className="cert-body-text">
-                      For outstanding performance and achievement as <strong>{singleForm.achievement || 'Participant'}</strong> in the <strong>{selectedEvent?.name || 'Academic Event'}</strong> organized by {selectedEvent?.organizingBody || 'College Department'}.
-                    </p>
-                  </div>
-
-                  <div className="cert-footer-row">
-                    <div className="cert-qr-mock">
-                      <QrCode size={40} className="icon-cyan" />
-                      <span className="mono cert-qr-caption">SCAN TO VERIFY</span>
-                    </div>
-
-                    <div className="cert-sig-box">
-                      <div className="cert-sig-line" />
-                      <span className="cert-sig-name">{selectedEvent?.signatoryName || 'Authorized Signatory'}</span>
-                      <span className="cert-sig-title">{selectedEvent?.signatoryTitle || 'Dean of Engineering'}</span>
-                    </div>
-                  </div>
-                </div>
+            {templatePreviewUrl ? (
+              <iframe
+                title="Selected certificate template preview"
+                src={`${templatePreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+                className="certificate-pdf-preview"
+              />
+            ) : (
+              <div className="empty-logs-box">
+                {templatePreviewError || (!user
+                  ? 'Sign in and select a template to preview the certificate design.'
+                  : !selectedTemplateId
+                    ? 'Select a template to preview the certificate design.'
+                    : 'Rendering the selected certificate preview...')}
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
@@ -684,7 +860,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                 <FileSpreadsheet size={22} className="icon-cyan" />
                 <span>Bulk Certificate Issuance Engine</span>
               </h3>
-              <p className="card-sub">Upload CSV or XLSX to mint 1 to 200 certificates in a single batch with automated PDF generation and blockchain anchoring.</p>
+              <p className="card-sub">Upload CSV or XLSX to issue 1 to 200 certificates with PDF generation and blockchain registration.</p>
             </div>
             <button className="btn btn-secondary btn-sm" onClick={downloadSampleCsv}>
               <Download size={15} />
@@ -694,14 +870,16 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
           <div className="bulk-config-row">
             <div className="form-group flex-1">
-              <label className="field-label">Target Event</label>
-              <select 
+              <label className="field-label">Event name</label>
+              <select
                 className="input-field"
                 value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
+                onChange={(e) => handleEventChange(e.target.value)}
+                required
               >
-                {events.map(ev => (
-                  <option key={ev.id} value={ev.id}>{ev.name}</option>
+                <option value="">Select an event created in Event Management</option>
+                {uniqueEvents.map((event) => (
+                  <option key={event.id} value={event.id}>{event.name}</option>
                 ))}
               </select>
             </div>
@@ -734,7 +912,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
             />
             <UploadCloud size={36} className="icon-cyan" />
             <h4>{isPreviewingBulk ? 'Validating recipient file...' : (csvFile ? csvFile.name : 'Click to Upload Recipients CSV or XLSX')}</h4>
-            <p>Required column: student_name. Optional: student_id, team_name, project_title, position, achievement, certificate_title</p>
+            <p>Required: student_name. Optional: email, student_id, department, certificate_title, team_name, project_title, position. Select the event above; no event column is needed.</p>
           </div>
 
           {bulkError && (
@@ -774,11 +952,13 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     <tr>
                       <th>#</th>
                       <th>Student Name</th>
+                      <th>Email</th>
                       <th>Student ID</th>
-                      <th>Team</th>
-                      <th>Project</th>
+                      <th>Department</th>
+                      <th>Certificate Title</th>
+                      <th>Team Name</th>
+                      <th>Project Title</th>
                       <th>Position</th>
-                      <th>Achievement</th>
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -786,6 +966,66 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     {parsedRows.map((row) => (
                       <tr key={row.row}>
                         <td className="mono">{row.row}</td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.name}
+                            aria-label={`Student name for row ${row.row}`}
+                            onChange={(e) => {
+                              const name = e.target.value;
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => validateBulkRows(rows.map((item) => item.row === row.row
+                                ? { ...item, name }
+                                : item)));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.email}
+                            aria-label={`Email for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, email: e.target.value } : item));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field mono"
+                            value={row.id}
+                            aria-label={`Student ID for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => validateBulkRows(rows.map((item) => item.row === row.row
+                                ? { ...item, id: e.target.value }
+                                : item)));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.department}
+                            aria-label={`Department for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, department: e.target.value } : item));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.certificateTitle}
+                            aria-label={`Certificate title for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, certificateTitle: e.target.value } : item));
+                            }}
+                          />
+                        </td>
                         <td>
                           <input
                             className="input-field"
@@ -816,46 +1056,6 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                             onChange={(e) => {
                               setBulkRowsEdited(true);
                               setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, position: e.target.value } : item));
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="input-field"
-                            value={row.name}
-                            aria-label={`Student name for row ${row.row}`}
-                            onChange={(e) => {
-                              const name = e.target.value;
-                              setBulkRowsEdited(true);
-                              setParsedRows((rows) => validateBulkRows(rows.map((item) => item.row === row.row
-                                ? { ...item, name }
-                                : item)));
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="input-field mono"
-                            value={row.id}
-                            aria-label={`Student ID for row ${row.row}`}
-                            onChange={(e) => {
-                              setBulkRowsEdited(true);
-                              setParsedRows((rows) => validateBulkRows(rows.map((item) => item.row === row.row
-                                ? { ...item, id: e.target.value }
-                                : item)));
-                            }}
-                          />
-                        </td>
-                        <td>
-                          <input
-                            className="input-field"
-                            value={row.achievement}
-                            aria-label={`Achievement for row ${row.row}`}
-                            onChange={(e) => {
-                              setBulkRowsEdited(true);
-                              setParsedRows((rows) => rows.map((item) => item.row === row.row
-                                ? { ...item, achievement: e.target.value }
-                                : item));
                             }}
                           />
                         </td>
@@ -904,6 +1104,34 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       {/* --- SUB-TAB 3: CERTIFICATE REGISTRY VAULT --- */}
       {activeSubTab === 'vault' && (
         <div className="vault-layout glass-panel">
+          {!user && (
+            <div className="auth-prompt-banner" style={{ background: 'rgba(157, 107, 245, 0.08)', border: '1px solid rgba(157, 107, 245, 0.25)', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <Lock size={18} className="text-lilac" />
+                <span style={{ fontSize: '0.88rem', color: '#1f2937', fontWeight: 500 }}>
+                  Authority login (Teacher or Admin) is required to view the persisted Registry Vault records.
+                </span>
+              </div>
+              {onRequireLogin && (
+                <button className="btn btn-primary btn-sm" onClick={onRequireLogin}>
+                  Authority Login
+                </button>
+              )}
+            </div>
+          )}
+
+          {vaultError && (
+            <div className="error-box" style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} />
+                <span>{vaultError}</span>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={loadCertificates}>
+                <RefreshCw size={12} style={{ marginRight: '4px' }} /> Retry
+              </button>
+            </div>
+          )}
+
           <div className="vault-toolbar">
             <div className="search-wrap">
               <Search size={18} className="search-icon" />
@@ -928,8 +1156,8 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                 <option value="REVOKED">REVOKED</option>
                 <option value="PENDING">PENDING</option>
               </select>
-              <button className="btn btn-secondary btn-sm" onClick={loadCertificates}>
-                <RefreshCw size={14} />
+              <button className="btn btn-secondary btn-sm" onClick={loadCertificates} title="Reload Vault Records">
+                <RefreshCw size={14} className={vaultLoading ? 'animate-spin' : ''} />
               </button>
             </div>
           </div>
@@ -942,71 +1170,156 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                   <th>Certificate ID</th>
                   <th>Recipient</th>
                   <th>Event</th>
-                  <th>Document Hash</th>
+                  <th>Blockchain records</th>
                   <th>Validity</th>
                   <th>Status</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredCerts.length === 0 ? (
+                {vaultLoading ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-6 text-muted">
-                      {vaultLoading ? 'Loading certificates...' : 'No matching certificates found.'}
+                    <td colSpan="7" className="text-center py-8">
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: '#6b7280' }}>
+                        <RefreshCw size={22} className="animate-spin text-lilac" />
+                        <span style={{ fontSize: '0.88rem', fontWeight: 500 }}>Loading certificate records from vault...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : filteredCerts.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-8 text-muted">
+                      {searchQuery || statusFilter !== 'ALL'
+                        ? 'No matching certificates found for the active filter.'
+                        : 'No certificates found in the registry vault.'}
                     </td>
                   </tr>
                 ) : (
-                  filteredCerts.map((cert) => (
-                    <tr key={cert.id || cert.certificateId}>
-                      <td className="mono highlight-id">{cert.certificateId}</td>
-                      <td>
-                        <div className="recipient-cell">
-                          <span className="font-semibold">{cert.recipientName}</span>
-                          <span className="mono text-muted text-xs">{cert.studentIdentifier}</span>
-                        </div>
-                      </td>
-                      <td>{cert.event?.name || 'College Event'}</td>
-                      <td className="mono text-xs">{formatAddressOrHash(cert.documentHash, 6, 4)}</td>
-                      <td>
-                        {cert.validUntil ? (
-                          <span className={new Date(cert.validUntil).getTime() <= Date.now() ? 'text-red' : 'text-muted'}>
-                            {new Date(cert.validUntil).toLocaleDateString()}
-                            {new Date(cert.validUntil).getTime() <= Date.now() && ' (expired)'}
-                          </span>
-                        ) : (
-                          <span className="text-muted">Permanent</span>
-                        )}
-                      </td>
-                      <td>
-                        <span className={`badge badge-${cert.status?.toLowerCase()}`}>
-                          {cert.status}
-                        </span>
-                      </td>
-                      <td>
-                        <div className="action-buttons-cell">
-                          <a 
-                            href={api.getCertificatePdfUrl(cert.id || cert.certificateId)}
-                            target="_blank" 
-                            rel="noreferrer"
-                            className="btn btn-secondary btn-sm action-btn"
-                            title="Download PDF"
-                          >
-                            <Download size={13} />
-                          </a>
-
-                          {cert.status === 'CONFIRMED' && (
+                  filteredCerts.map((cert) => {
+                    const certKey = cert.id || cert.certificateId;
+                    const etherscanUrl = cert.explorerUrl || (cert.txHash ? `https://sepolia.etherscan.io/tx/${cert.txHash}` : null);
+                    return (
+                      <tr key={certKey}>
+                        <td className="mono highlight-id">
+                          <div className="copyable-identifier">
+                            <span>{formatAddressOrHash(cert.certificateId, 8, 4)}</span>
                             <button 
-                              className="btn btn-danger btn-sm action-btn"
-                              title="Revoke Certificate"
-                              onClick={() => setRevokingCert(cert)}
+                              type="button"
+                              className="copy-icon-btn" 
+                              onClick={() => copyIdentifier(cert.certificateId, `certificate-${certKey}`)} 
+                              aria-label="Copy certificate ID" 
+                              title="Copy certificate ID"
                             >
-                              <Trash2 size={13} />
+                              {copiedIdentifier === `certificate-${certKey}` ? <CheckCircle2 size={13} className="text-green" /> : <Copy size={13} />}
                             </button>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="recipient-cell">
+                            <span className="font-semibold">{cert.recipientName}</span>
+                            <span className="mono text-muted text-xs">{cert.studentIdentifier}</span>
+                          </div>
+                        </td>
+                        <td>{cert.event?.name || 'College Event'}</td>
+                        <td className="mono text-xs">
+                          <div className="registry-identifiers">
+                            {cert.txHash && (
+                              <div className="copyable-identifier">
+                                <span>Tx: {formatAddressOrHash(cert.txHash, 7, 5)}</span>
+                                <button 
+                                  type="button"
+                                  className="copy-icon-btn" 
+                                  onClick={() => copyIdentifier(cert.txHash, `tx-${certKey}`)} 
+                                  aria-label="Copy transaction hash" 
+                                  title="Copy transaction hash"
+                                >
+                                  {copiedIdentifier === `tx-${certKey}` ? <CheckCircle2 size={13} className="text-green" /> : <Copy size={13} />}
+                                </button>
+                                {etherscanUrl && (
+                                  <a 
+                                    href={etherscanUrl} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="tx-explorer-link"
+                                    title="View transaction on Etherscan"
+                                  >
+                                    <ExternalLink size={13} />
+                                  </a>
+                                )}
+                              </div>
+                            )}
+                            {cert.ipfsHash && (
+                              <div className="copyable-identifier">
+                                <span>IPFS: {formatAddressOrHash(cert.ipfsHash, 7, 5)}</span>
+                                <button 
+                                  type="button"
+                                  className="copy-icon-btn" 
+                                  onClick={() => copyIdentifier(cert.ipfsHash, `ipfs-${certKey}`)} 
+                                  aria-label="Copy IPFS CID" 
+                                  title="Copy IPFS CID"
+                                >
+                                  {copiedIdentifier === `ipfs-${certKey}` ? <CheckCircle2 size={13} className="text-green" /> : <Copy size={13} />}
+                                </button>
+                              </div>
+                            )}
+                            {cert.contractAddress && (
+                              <div className="copyable-identifier">
+                                <span>Contract: {formatAddressOrHash(cert.contractAddress, 7, 5)}</span>
+                                <button 
+                                  type="button"
+                                  className="copy-icon-btn" 
+                                  onClick={() => copyIdentifier(cert.contractAddress, `contract-${certKey}`)} 
+                                  aria-label="Copy contract address" 
+                                  title="Copy contract address"
+                                >
+                                  {copiedIdentifier === `contract-${certKey}` ? <CheckCircle2 size={13} className="text-green" /> : <Copy size={13} />}
+                                </button>
+                              </div>
+                            )}
+                            {cert.documentHash && <span>Hash: {formatAddressOrHash(cert.documentHash, 7, 5)}</span>}
+                          </div>
+                        </td>
+                        <td>
+                          {cert.validUntil ? (
+                            <span className={new Date(cert.validUntil).getTime() <= Date.now() ? 'text-red' : 'text-muted'}>
+                              {new Date(cert.validUntil).toLocaleDateString()}
+                              {new Date(cert.validUntil).getTime() <= Date.now() && ' (expired)'}
+                            </span>
+                          ) : (
+                            <span className="text-muted">Permanent</span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        <td>
+                          <span className={`badge badge-${(cert.lifecycleStatus || cert.status)?.toLowerCase()}`}>
+                            {cert.lifecycleStatus || cert.status}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="action-buttons-cell">
+                            <a 
+                              href={api.getCertificatePdfUrl(cert.id || cert.certificateId)}
+                              target="_blank" 
+                              rel="noreferrer"
+                              className="btn btn-secondary btn-sm action-btn"
+                              title="Download PDF"
+                            >
+                              <Download size={13} />
+                            </a>
+
+                            {(cert.status === 'CONFIRMED' || cert.lifecycleStatus === 'ISSUED') && (
+                              <button 
+                                className="btn btn-danger btn-sm action-btn"
+                                title="Revoke Certificate"
+                                onClick={() => setRevokingCert(cert)}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

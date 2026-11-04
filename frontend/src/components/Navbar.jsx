@@ -35,7 +35,7 @@ export default function Navbar({
             <div className="logo-sparkle" />
           </div>
           <div className="brand-text">
-            <span className="brand-title">CERTI<span className="gradient-text">CHAIN</span></span>
+            <span className="brand-title">CERTIFIED</span>
             <span className="brand-subtitle">VESIT CERTIFICATE SERVICES</span>
           </div>
         </div>

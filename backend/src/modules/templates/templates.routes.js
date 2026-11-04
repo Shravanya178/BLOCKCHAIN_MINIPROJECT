@@ -67,7 +67,7 @@ router.get(
 router.get(
   '/:templateId/preview',
   asyncHandler(async (req, res) => {
-    const pdf = await service.preview(req.params.templateId);
+    const pdf = await service.preview(req.params.templateId, req.query);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="template-preview.pdf"');
     res.send(pdf);

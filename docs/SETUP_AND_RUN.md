@@ -27,11 +27,16 @@ npm install
 
 ## 3. Prepare local assets
 
-The original PDF designs are intentionally excluded from Git because they are large binary assets. Place the supplied individual PDFs in:
+The four original PDF designs are intentionally excluded from Git because they are large binary assets. Place these files in:
 
 ```text
 TEMPLATES\
 ```
+
+`CERTIFIED_Template_01_Gold.pdf`, `CERTIFIED_Template_02_Lilac.pdf`,
+`CERTIFIED_Template_03_Navy.pdf` and `CERTIFIED_Template_04_Burgundy.pdf`
+are the active designs. Run `npm run db:seed` after restoring them to synchronize
+the template catalog without resetting existing certificate data.
 
 The seed expects the original filenames used by `backend/src/modules/templates/assetTemplates.js`. Do not rename or edit those PDFs.
 
@@ -108,7 +113,33 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## 7. Use the application
+## 7. Temporary HTTPS tunnel for a public demonstration
+
+The app remains local unless you explicitly expose the frontend and backend through HTTPS tunnels. Create one tunnel for the frontend on port `3000` and one for the backend on port `4000`. Keep both tunnel URLs active for the whole demonstration.
+
+Set the public frontend tunnel URL and backend tunnel URL in the local environment:
+
+In `backend\.env`:
+
+```dotenv
+PUBLIC_BASE_URL=https://<backend-tunnel-host>
+PUBLIC_FRONTEND_URL=https://<frontend-tunnel-host>
+CORS_ORIGINS=http://localhost:3000,http://localhost:5173,https://<frontend-tunnel-host>
+```
+
+In `frontend\.env.local`:
+
+```dotenv
+VITE_API_URL=https://<backend-tunnel-host>/api/v1
+```
+
+Use the actual HTTPS origins supplied by your tunnel provider; do not include a path in `PUBLIC_FRONTEND_URL` or in the frontend entry in `CORS_ORIGINS`. `PUBLIC_FRONTEND_URL` is where newly issued QR codes open, with the certificate ID in the `certificateId` query parameter. The public verification page reads that ID and verifies it through `VITE_API_URL`.
+
+Restart the backend after changing `backend\.env` and restart Vite after changing `frontend\.env.local`. Vite embeds `VITE_API_URL` at startup/build time. Confirm the browser can open the frontend tunnel, the backend tunnel's `/ready` endpoint is reachable, and a request from the frontend tunnel is accepted by backend CORS. Keep local origins in `CORS_ORIGINS` so local development continues to work.
+
+Tunnel URLs are temporary and can change when a tunnel restarts. QR codes generated while a tunnel URL is configured keep that URL, so keep the frontend tunnel active for those certificates or use a stable domain. Do not enable wildcard CORS for a public demonstration. Keep database access, signing keys, and other secrets private; exposing the web ports does not make those secrets safe to share.
+
+## 8. Use the application
 
 1. Open **Authority Login**.
 2. Sign in with the seeded admin or teacher account.
@@ -129,7 +160,7 @@ achievement, certificate_title, department, email
 
 `student_name` is required. Empty optional values remain empty and are not replaced with `N/A`.
 
-## 8. Sepolia and Pinata mode
+## 9. Sepolia and Pinata mode
 
 Use a funded Sepolia deployment wallet and a separate or explicitly authorized backend issuer wallet. Configure:
 
@@ -159,7 +190,7 @@ The script writes deployment metadata to `backend/deployments/sepolia.json`, whi
 
 Before any real issuance, test Pinata with a synthetic PDF and confirm that the JWT has file-upload permission. Never upload real student data without authorization.
 
-## 9. Health and API inspection
+## 10. Health and API inspection
 
 With the backend running:
 
@@ -175,7 +206,7 @@ GET  /api/v1/verify/:certificateId
 POST /api/v1/verify/document
 ```
 
-## 10. Validation commands
+## 11. Validation commands
 
 Run focused checks during development:
 
@@ -191,7 +222,7 @@ npm run lint
 
 Do not run external transactions merely to validate a code change. Use local Hardhat for routine development and reserve Sepolia for an intentional demonstration.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### Database connection fails
 

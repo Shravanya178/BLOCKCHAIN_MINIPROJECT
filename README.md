@@ -1,14 +1,14 @@
-# CertiChain
+# CERTIFIED
 
-Blockchain-based college event certificate issuance and verification for VES Institute of Technology (VESIT).
+Certificate management and public verification for VES Institute of Technology (VESIT).
 
-CertiChain lets an authorized organizer create an event, choose a certificate design, upload participant data, issue personalized certificates, store the final PDF on IPFS, and register only its cryptographic proof on Ethereum. Anyone can verify a certificate by ID or by uploading the PDF, without logging in or connecting MetaMask.
+CERTIFIED lets an authorized organizer create an event, choose a certificate design, upload participant data, issue personalized certificates, store the final PDF on IPFS, and register only its cryptographic proof on Ethereum. Anyone can verify a certificate by ID or by uploading the PDF, without logging in or connecting MetaMask.
 
 ## What the system does
 
 - Admin and teacher authentication with role-based access.
 - Event creation with event category, certificate type, validity and signatory details.
-- Versioned certificate templates, including the 28 supplied PDF designs when the local `TEMPLATES/` assets are present.
+- Four versioned VESIT certificate PDF designs from the local `TEMPLATES/` assets.
 - CSV/XLSX participant parsing with preview, duplicate detection and optional fields.
 - Single and bulk certificate issuance.
 - Conditional participant fields such as roll number, team, project and position.
@@ -102,6 +102,8 @@ npm run dev
 ```
 
 Open `http://localhost:3000`. Backend health is available at `http://localhost:4000/health`, readiness at `/ready`, and Swagger at `/api/docs`.
+
+For a temporary public demonstration, expose frontend port `3000` and backend port `4000` through HTTPS tunnels. Set `PUBLIC_FRONTEND_URL` and `CORS_ORIGINS` in `backend/.env`, and set `VITE_API_URL` in `frontend/.env.local` to the backend tunnel's `/api/v1` URL. Restart both processes after changing these values. The QR opens the configured frontend URL and the verification page calls the configured API. See [the setup guide](docs/SETUP_AND_RUN.md#7-temporary-https-tunnel-for-a-public-demonstration) for details.
 
 ## Network modes
 

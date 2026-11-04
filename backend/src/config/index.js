@@ -15,7 +15,7 @@ const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: int(4000),
   PUBLIC_BASE_URL: z.string().url().default('http://localhost:4000'),
-  VERIFICATION_URL_BASE: z.preprocess(emptyToUndefined, z.string().url().optional()),
+  PUBLIC_FRONTEND_URL: z.string().url().default('http://localhost:3000'),
   CORS_ORIGINS: z.string().default('http://localhost:3000,http://localhost:5173'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
@@ -64,6 +64,12 @@ if (!parsed.success) {
 const env = parsed.data;
 const backendRoot = path.resolve(__dirname, '../..');
 const apiPrefix = '/api/v1';
+const publicFrontendUrl = env.PUBLIC_FRONTEND_URL.replace(/\/+$/, '');
+const publicFrontendOrigin = new URL(publicFrontendUrl).origin;
+const corsOrigins = [...new Set([
+  ...env.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean),
+  publicFrontendOrigin,
+])];
 
 const config = {
   env: env.NODE_ENV,
@@ -72,8 +78,8 @@ const config = {
   port: env.PORT,
   apiPrefix,
   publicBaseUrl: env.PUBLIC_BASE_URL.replace(/\/+$/, ''),
-  verificationUrlBase: (env.VERIFICATION_URL_BASE || `${env.PUBLIC_BASE_URL.replace(/\/+$/, '')}${apiPrefix}/verify`).replace(/\/+$/, ''),
-  corsOrigins: env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
+  publicFrontendUrl,
+  corsOrigins,
   institutionName: env.INSTITUTION_NAME,
   jwt: {
     accessSecret: env.JWT_ACCESS_SECRET,

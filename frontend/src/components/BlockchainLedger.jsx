@@ -1,13 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  FileText, 
-  ExternalLink, 
-  Copy, 
-  CheckCircle2, 
-  ShieldCheck, 
   Clock, 
   RefreshCw,
-  Hash,
   Activity,
   Layers
 } from 'lucide-react';

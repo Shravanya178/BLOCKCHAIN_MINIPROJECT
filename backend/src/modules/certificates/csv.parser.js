@@ -7,18 +7,22 @@ const AppError = require('../../utils/AppError');
 function normalizeRecord(record, rowNumber) {
   const normalized = {};
   for (const [key, value] of Object.entries(record)) {
-    const cleanKey = String(key).trim().toLowerCase().replace(/[\s-]+/g, '_');
+    const cleanKey = String(key)
+      .trim()
+      .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+      .toLowerCase()
+      .replace(/[\s-]+/g, '_');
     normalized[cleanKey] = typeof value === 'string' ? value.trim() : value;
   }
 
   return {
     rowNumber,
-    studentName: normalized.student_name || normalized.name || normalized.student || normalized.recipient_name,
-    studentId: normalized.student_id || normalized.id || normalized.roll_no || normalized.prn || null,
+    studentName: normalized.student_name || normalized.name || normalized.student || normalized.recipient_name || null,
+    studentId: normalized.student_id || normalized.id || normalized.roll_no || normalized.roll_number || normalized.prn || null,
     teamName: normalized.team_name || normalized.team || null,
     projectTitle: normalized.project_title || normalized.project || null,
     position: normalized.position || normalized.rank || null,
-    achievement: normalized.achievement || normalized.grade || normalized.rank || normalized.position || null,
+    achievement: normalized.achievement || normalized.grade || null,
     department: normalized.department || null,
     email: normalized.email || null,
     certificateTitle: normalized.certificate_title || normalized.title || null,

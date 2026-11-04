@@ -1,6 +1,5 @@
 const prisma = require('../src/config/prisma');
 const { hashPassword } = require('../src/modules/auth/auth.service');
-const defaultTemplates = require('../src/modules/templates/defaultTemplates');
 const assetTemplates = require('../src/modules/templates/assetTemplates');
 const logger = require('../src/utils/logger');
 require('dotenv').config();
@@ -55,9 +54,10 @@ async function seed() {
     console.log(`Teacher user already exists: ${teacherEmail}`);
   }
 
-  // 3. Seed default templates and the supplied certificate PDF designs.
+  // 3. Seed the four supplied certificate PDF designs.
   let defaultTemplateId = null;
-  for (const t of [...defaultTemplates, ...assetTemplates]) {
+  const activeTemplateDefinitions = assetTemplates;
+  for (const t of activeTemplateDefinitions) {
     const existing = await prisma.certificateTemplate.findUnique({ where: { key: t.key } });
     if (!existing) {
       const created = await prisma.certificateTemplate.create({
@@ -93,36 +93,103 @@ async function seed() {
     }
   }
 
-  // 4. Seed Demo College Event
-  const eventName = 'HackVenture 2026 - Annual Hackathon';
-  let demoEvent = await prisma.event.findFirst({ where: { name: eventName } });
-  if (!demoEvent) {
-    demoEvent = await prisma.event.create({
-      data: {
-        name: eventName,
-        description: '36-hour National Level Hackathon celebrating innovation and code.',
-        eventDate: new Date('2026-03-15T00:00:00.000Z'),
-        endDate: new Date('2026-03-16T00:00:00.000Z'),
-        venue: 'College Convention Centre & Tech Labs',
-        organizingBody: 'Department of Computer Engineering & ACM Student Chapter',
-        institutionName: process.env.INSTITUTION_NAME || 'Institute of Engineering and Technology',
-        signatoryName: 'Dr. Ramesh Kulkarni',
-        signatoryTitle: 'Principal & Event Patron',
-        status: 'ACTIVE',
-        createdById: teacher.id,
-        issuerId: teacher.id,
-        defaultTemplateId: defaultTemplateId,
+  // Keep historical template rows for existing certificate relations, but do
+  // not expose obsolete designs for new issuance.
+  await prisma.certificateTemplate.updateMany({
+    where: { key: { notIn: activeTemplateDefinitions.map((t) => t.key) } },
+    data: { isActive: false },
+  });
+
+  if (defaultTemplateId) {
+    await prisma.event.updateMany({
+      where: {
+        defaultTemplateId: { not: defaultTemplateId },
       },
+      data: { defaultTemplateId },
     });
-    console.log(`Created demo Event: "${eventName}" (${demoEvent.id})`);
-  } else {
-    console.log(`Demo event already exists: "${eventName}"`);
+  }
+
+  // 4. Seed the 5 actual event records
+  const targetEventDefs = [
+    {
+      name: 'GENESIS 2.0',
+      description: 'Annual National Technical Symposium and Project Showcase',
+      category: 'TECHNICAL_WORKSHOPS',
+      certificateType: 'PARTICIPATION',
+      eventDate: new Date('2026-02-15'),
+      organizingBody: 'VESIT Technical Society',
+      institutionName: 'VES Institute of Technology',
+      signatoryName: 'Dr. (Mrs.) J. M. Nair',
+      signatoryTitle: 'Principal',
+      defaultTemplateId,
+    },
+    {
+      name: 'BLOCKCHAIN WORKSHOP',
+      description: 'Comprehensive Hands-on Workshop on Ethereum, Smart Contracts and Decentralized Architecture',
+      category: 'TECHNICAL_WORKSHOPS',
+      certificateType: 'COMPLETION',
+      eventDate: new Date('2026-01-20'),
+      organizingBody: 'Department of Computer Engineering',
+      institutionName: 'VES Institute of Technology',
+      signatoryName: 'Dr. (Mrs.) J. M. Nair',
+      signatoryTitle: 'Principal',
+      defaultTemplateId,
+    },
+    {
+      name: 'AGENTIC AI SEMINAR',
+      description: 'Advanced Research Seminar on Autonomous Agents and LLM Architectures',
+      category: 'SEMINARS',
+      certificateType: 'PARTICIPATION',
+      eventDate: new Date('2026-02-28'),
+      organizingBody: 'Department of Information Technology',
+      institutionName: 'VES Institute of Technology',
+      signatoryName: 'Dr. (Mrs.) J. M. Nair',
+      signatoryTitle: 'Principal',
+      defaultTemplateId,
+    },
+    {
+      name: 'ENTREPRENEUR TALK',
+      description: 'Interactive Leadership & Innovation Session with Tech Founders and Angel Investors',
+      category: 'ENTREPRENEURSHIP',
+      certificateType: 'PARTICIPATION',
+      eventDate: new Date('2026-03-10'),
+      organizingBody: 'VESIT E-Cell & IIC',
+      institutionName: 'VES Institute of Technology',
+      signatoryName: 'Dr. (Mrs.) J. M. Nair',
+      signatoryTitle: 'Principal',
+      defaultTemplateId,
+    },
+    {
+      name: 'UTSAV 3.0',
+      description: 'Annual Inter-Collegiate Cultural Festival & Talent Showcase',
+      category: 'CULTURAL',
+      certificateType: 'PARTICIPATION',
+      eventDate: new Date('2026-03-25'),
+      organizingBody: 'VESIT Cultural Council',
+      institutionName: 'VES Institute of Technology',
+      signatoryName: 'Dr. (Mrs.) J. M. Nair',
+      signatoryTitle: 'Principal',
+      defaultTemplateId,
+    },
+  ];
+
+  for (const evDef of targetEventDefs) {
+    const existing = await prisma.event.findFirst({ where: { name: evDef.name } });
+    if (!existing) {
+      await prisma.event.create({
+        data: {
+          ...evDef,
+          createdById: admin.id,
+          issuerId: admin.id,
+        },
+      });
+      console.log(`Seeded event: ${evDef.name}`);
+    }
   }
 
   console.log('\n--- Seeding Complete ---');
   console.log(`Admin Login:   ${adminEmail} / ${adminPassword}`);
   console.log(`Teacher Login: ${teacherEmail} / ${teacherPassword}`);
-  console.log(`Demo Event ID: ${demoEvent.id}`);
 }
 
 seed()

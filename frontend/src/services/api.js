@@ -1,4 +1,4 @@
-// Complete REST API Client for Arnav's Backend (http://localhost:4000/api/v1)
+// REST API Client for Certificate Registry Backend (http://localhost:4000/api/v1)
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
 
@@ -7,6 +7,7 @@ class ApiClient {
     this.accessToken = localStorage.getItem('cert_access_token');
     this.refreshToken = localStorage.getItem('cert_refresh_token');
     this.user = JSON.parse(localStorage.getItem('cert_user') || 'null');
+    this.refreshPromise = null;
   }
 
   setSession(tokenPayload, user) {
@@ -64,6 +65,7 @@ class ApiClient {
         response = await fetch(url, { ...options, headers });
       } else {
         this.clearSession();
+        window.dispatchEvent(new Event('certified:session-expired'));
       }
     }
 
@@ -87,21 +89,29 @@ class ApiClient {
   }
 
   async refreshTokens() {
-    try {
-      const res = await fetch(`${API_BASE}/auth/refresh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refreshToken: this.refreshToken }),
-      });
-      if (!res.ok) return false;
-      const data = await res.json();
-      if (data?.data?.accessToken) {
+    if (this.refreshPromise) return this.refreshPromise;
+
+    this.refreshPromise = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: this.refreshToken }),
+        });
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (!data?.data?.accessToken) return false;
         this.setSession(data.data);
         return true;
+      } catch {
+        return false;
       }
-      return false;
-    } catch {
-      return false;
+    })();
+
+    try {
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
     }
   }
 
@@ -175,6 +185,17 @@ class ApiClient {
 
   getTemplatePreviewUrl(id) {
     return `${API_BASE}/templates/${id}/preview`;
+  }
+
+  async getTemplatePreviewBlob(id, values = {}) {
+    const query = new URLSearchParams(
+      Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== ''),
+    ).toString();
+    const response = await fetch(`${this.getTemplatePreviewUrl(id)}${query ? `?${query}` : ''}`, {
+      headers: this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {},
+    });
+    if (!response.ok) throw new Error(`Template preview failed (${response.status})`);
+    return response.blob();
   }
 
   // --- Certificates Endpoints ---

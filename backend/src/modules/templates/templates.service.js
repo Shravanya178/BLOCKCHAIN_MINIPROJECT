@@ -3,6 +3,7 @@
 const { z } = require('zod');
 const fs = require('fs/promises');
 const path = require('path');
+const { randomUUID } = require('crypto');
 const prisma = require('../../config/prisma');
 const AppError = require('../../utils/AppError');
 const storage = require('../../services/storage.service');
@@ -12,10 +13,16 @@ const { buildVerificationUrl } = require('../../services/qr.service');
 const { magic } = require('../../middleware/upload');
 const { isUuid } = require('../../validators/common');
 const { layoutSchema } = require('./layout.schema');
+const assetTemplates = require('./assetTemplates');
 const audit = require('../audit/audit.service');
 const config = require('../../config');
 
 const CATEGORIES = ['PARTICIPATION', 'ACHIEVEMENT', 'WORKSHOP', 'TECHNICAL', 'OTHER'];
+const assetLayouts = new Map(assetTemplates.map((template) => [template.key, template.layout]));
+
+function currentLayout(template) {
+  return assetLayouts.get(template.key) || template.layout;
+}
 
 // Multipart forms send everything as strings; accept JSON strings for layout.
 const jsonField = (schema) =>
@@ -60,7 +67,7 @@ const publicTemplate = (t) => ({
   hasBackground: Boolean(t.backgroundKey),
   backgroundUrl: t.backgroundKey ? `${config.apiPrefix}/templates/${t.id}/background` : null,
   previewUrl: `${config.apiPrefix}/templates/${t.id}/preview`,
-  layout: t.layout,
+  layout: currentLayout(t),
   isActive: t.isActive,
   version: t.version,
   createdAt: t.createdAt,
@@ -92,7 +99,7 @@ async function getTemplateOrThrow(templateId) {
 async function getUsableTemplate(templateId) {
   const t = await getTemplateOrThrow(templateId);
   if (!t.isActive) throw AppError.validation('Selected template is inactive');
-  const parsed = layoutSchema.safeParse(t.layout);
+  const parsed = layoutSchema.safeParse(currentLayout(t));
   if (!parsed.success) throw AppError.validation('Selected template has an invalid layout');
   return { ...t, layout: parsed.data };
 }
@@ -154,30 +161,49 @@ async function update(user, templateId, body, file, ip) {
 }
 
 /** Renders a sample PDF so the team can align a Canva background with the layout. */
-async function preview(templateId) {
+async function preview(templateId, previewData = {}) {
   const t = await getTemplateOrThrow(templateId);
-  const parsed = layoutSchema.safeParse(t.layout);
+  const parsed = layoutSchema.safeParse(currentLayout(t));
   if (!parsed.success) throw AppError.validation('Template layout is invalid', parsed.error.issues);
-  const certificateId = 'CERT-PREVIEW-0000';
+  const certificateId = `PREVIEW-${randomUUID()}`;
+  const issueDate = new Date();
+  let validUntil = null;
+  if (previewData.validityPolicy === 'UNTIL_DATE') {
+    validUntil = previewData.validUntil || '';
+  } else if (previewData.validityPolicy === 'DAYS_AFTER_ISSUE') {
+    const days = Number(previewData.validityDays);
+    if (Number.isInteger(days) && days > 0) {
+      validUntil = new Date(issueDate);
+      validUntil.setUTCDate(validUntil.getUTCDate() + days);
+    }
+  }
   return renderCertificatePdf({
     template: { ...t, layout: parsed.data },
     background: await loadBackground(t),
     verificationUrl: buildVerificationUrl(certificateId),
     data: {
-      certificateId,
-      studentName: 'Aaradhya Venkataraman Subramaniam',
-      studentId: '2023CS0042',
-      eventName: 'National Level Hackathon - CodeStorm 2026',
-      eventDate: new Date(),
-      issueDate: new Date(),
-      achievement: 'First Prize',
-      certificateTitle: t.name,
-      organizingBody: 'Department of Computer Engineering',
-      institutionName: config.institutionName,
-      issuerName: 'Prof. A. Sharma',
-      signatoryName: 'Dr. R. Kulkarni',
-      signatoryTitle: 'Principal',
-      venue: 'Main Auditorium',
+      certificateId: '',
+      studentName: previewData.studentName || '',
+      studentId: previewData.studentId || '',
+      eventName: previewData.eventName || '',
+      eventDate: previewData.eventDate || '',
+      eventEndDate: previewData.eventEndDate || '',
+      issueDate,
+      validUntil,
+      achievement: previewData.achievement || '',
+      certificateTitle: previewData.certificateTitle || '',
+      certificateType: previewData.certificateType || '',
+      department: previewData.department || '',
+      organizingBody: previewData.organizingBody || '',
+      institutionName: previewData.institutionName || '',
+      issuerName: previewData.issuerName || '',
+      signatoryName: previewData.signatoryName || '',
+      signatoryTitle: previewData.signatoryTitle || '',
+      signatoryDesignation: previewData.signatoryDesignation || previewData.signatoryTitle || '',
+      venue: previewData.venue || '',
+      teamName: previewData.teamName || '',
+      projectTitle: previewData.projectTitle || '',
+      position: previewData.position || '',
     },
   });
 }

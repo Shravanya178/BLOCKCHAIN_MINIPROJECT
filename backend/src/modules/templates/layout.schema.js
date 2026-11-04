@@ -46,7 +46,7 @@ const textField = z.object({
 const customText = textField.extend({ text: z.string().min(1).max(500) });
 
 const FIELD_NAMES = [
-  'studentName', 'studentId', 'eventName', 'eventDate', 'issueDate', 'achievement',
+  'studentName', 'studentId', 'eventName', 'eventDate', 'issueDate', 'validUntil', 'achievement',
   'certificateTitle', 'organizingBody', 'institutionName', 'issuerName',
   'signatoryName', 'signatoryDesignation', 'signatoryTitle', 'venue', 'department',
   'certificateType', 'teamName', 'projectTitle', 'position', 'certificateId', 'verificationUrl',

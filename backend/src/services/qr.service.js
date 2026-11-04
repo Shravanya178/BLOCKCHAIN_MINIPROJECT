@@ -5,7 +5,9 @@ const config = require('../config');
 
 /** Stable public verification URL. Contains only the public certificate ID. */
 function buildVerificationUrl(certificateId) {
-  return `${config.verificationUrlBase}/${encodeURIComponent(certificateId)}`;
+  const url = new URL(config.publicFrontendUrl);
+  url.searchParams.set('certificateId', certificateId);
+  return url.toString();
 }
 
 /** PNG QR code (Buffer) for the given URL. */

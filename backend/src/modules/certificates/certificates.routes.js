@@ -52,10 +52,19 @@ const reissueSchema = z.object({
 
 const listCertsSchema = paginationSchema.extend({
   eventId: z.string().uuid().optional(),
+  studentName: z.string().trim().max(100).optional(),
+  eventName: z.string().trim().max(200).optional(),
   status: z.enum(['PENDING', 'PDF_GENERATED', 'SUBMITTED_TO_BLOCKCHAIN', 'CONFIRMED', 'FAILED', 'REVOKED']).optional(),
   search: z.string().trim().max(100).optional(),
   batchId: z.string().uuid().optional(),
 });
+
+function lifecycleStatus(cert) {
+  if (cert.status === 'REVOKED' || cert.revokedAt) return 'REVOKED';
+  if (cert.validUntil && new Date(cert.validUntil) < new Date()) return 'EXPIRED';
+  if (cert.status === 'CONFIRMED') return 'ISSUED';
+  return cert.status;
+}
 
 /**
  * Public PDF download endpoint: allows direct downloading/viewing of finalized PDF.
@@ -106,11 +115,16 @@ router.get(
     if (q.eventId) where.eventId = q.eventId;
     if (q.status) where.status = q.status;
     if (q.batchId) where.batchId = q.batchId;
-    if (q.search) {
+    if (q.search || q.studentName || q.eventName) {
       where.OR = [
-        { recipientName: { contains: q.search, mode: 'insensitive' } },
-        { certificateId: { contains: q.search, mode: 'insensitive' } },
-        { studentIdentifier: { contains: q.search, mode: 'insensitive' } },
+        ...(q.search ? [
+          { recipientName: { contains: q.search, mode: 'insensitive' } },
+          { certificateId: { contains: q.search, mode: 'insensitive' } },
+          { studentIdentifier: { contains: q.search, mode: 'insensitive' } },
+          { event: { name: { contains: q.search, mode: 'insensitive' } } },
+        ] : []),
+        ...(q.studentName ? [{ recipientName: { contains: q.studentName, mode: 'insensitive' } }] : []),
+        ...(q.eventName ? [{ event: { name: { contains: q.eventName, mode: 'insensitive' } } }] : []),
       ];
     }
 
@@ -135,7 +149,17 @@ router.get(
       prisma.certificate.count({ where }),
     ]);
 
-    res.json({ success: true, data: items, meta: meta(q, total) });
+    const data = items.map((item) => {
+      const ipfsHash = item.storageKey?.startsWith('ipfs://') ? item.storageKey.slice('ipfs://'.length) : null;
+      const explorerBase = item.networkName === 'sepolia' ? 'https://sepolia.etherscan.io/tx/' : null;
+      return {
+        ...item,
+        lifecycleStatus: lifecycleStatus(item),
+        ipfsHash,
+        explorerUrl: item.txHash && explorerBase ? `${explorerBase}${item.txHash}` : null,
+      };
+    });
+    res.json({ success: true, data, meta: meta(q, total) });
   }),
 );
 

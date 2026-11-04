@@ -29,12 +29,29 @@ function formatDate(value, fmt = 'DD MMM YYYY') {
 
 /** Converts raw certificate data into display strings used by fields and {{placeholders}}. */
 function buildValues(data, verificationUrl, dateFormat) {
+  const duration = data.duration || (
+    data.eventEndDate && data.eventDate
+      ? `${formatDate(data.eventDate, dateFormat)} - ${formatDate(data.eventEndDate, dateFormat)}`
+      : ''
+  );
+  const certificateType = String(data.certificateType || '')
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const certificateTypeLabel = ['Participation', 'Completion'].includes(certificateType)
+    ? `Certificate of ${certificateType}`
+    : certificateType;
+  const validUntil = data.validUntil === null
+    ? 'Permanent'
+    : formatDate(data.validUntil, dateFormat);
   return {
     studentName: data.studentName,
     studentId: data.studentId || '',
     eventName: data.eventName,
     eventDate: formatDate(data.eventDate, dateFormat),
+    duration,
     issueDate: formatDate(data.issueDate, dateFormat),
+    validUntil,
     achievement: data.achievement || '',
     certificateTitle: data.certificateTitle || '',
     organizingBody: data.organizingBody || '',
@@ -45,7 +62,7 @@ function buildValues(data, verificationUrl, dateFormat) {
     signatoryTitle: data.signatoryTitle || '',
     venue: data.venue || '',
     department: data.department || '',
-    certificateType: data.certificateType || '',
+    certificateType: certificateTypeLabel,
     teamName: data.teamName || '',
     projectTitle: data.projectTitle || '',
     position: data.position || '',
@@ -54,11 +71,32 @@ function buildValues(data, verificationUrl, dateFormat) {
     qrCode: verificationUrl,
     signatureImage: data.signatureImage || '',
     institutionLogo: data.institutionLogo || '',
+    // Supplied PDF/custom layouts may use snake_case names. Keep these
+    // aliases explicit so no raw placeholder can reach the final PDF.
+    recipient_name: data.studentName || '',
+    certificate_description: data.certificateDescription || data.achievement || data.certificateTitle || '',
+    event_name: data.eventName || '',
+    event_date: formatDate(data.eventDate, dateFormat),
+    issuer_name: data.issuerName || data.signatoryName || '',
+    issuer_designation: data.issuerDesignation || data.signatoryDesignation || data.signatoryTitle || '',
+    signature: data.signature || data.signatureImage || data.signatoryName || '',
+    qr_code: verificationUrl,
+    certificate_id: data.certificateId || '',
   };
 }
 
-const fillPlaceholders = (text, values) =>
-  text.replace(/\{\{\s*([A-Za-z]+)\s*\}\}/g, (_, key) => (values[key] !== undefined ? String(values[key]) : ''));
+const fillPlaceholders = (text, values) => {
+  let missingValue = false;
+  const replaced = text.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, key) => {
+    const value = values[key];
+    if (value === undefined || value === null || String(value).trim() === '') {
+      missingValue = true;
+      return '';
+    }
+    return String(value);
+  });
+  return missingValue ? '' : replaced;
+};
 
 function resolveFont(doc, font, registered) {
   if (STANDARD_FONTS.includes(font)) return font;
@@ -144,15 +182,48 @@ function drawPdfLibText(page, spec, rawText, values, fonts) {
   if (spec.uppercase) text = text.toUpperCase();
   const { width, height } = page.getSize();
   const font = fonts[pdfLibFont(spec.font || 'Helvetica')];
-  const size = spec.fontSize;
-  page.drawText(text, {
-    x: spec.x * width,
-    y: height - (spec.y * height) - size,
-    size,
-    maxWidth: spec.width * width,
-    font,
-    color: pdfLibColor(spec.color || '#111111'),
-    lineHeight: size * 1.15,
+  const maxWidth = spec.width * width;
+  const minSize = spec.minFontSize || Math.max(5, spec.fontSize * 0.55);
+  let size = spec.fontSize;
+  while (size > minSize && font.widthOfTextAtSize(text, size) > maxWidth) size -= 0.5;
+  const lines = [];
+  let line = '';
+  for (const word of text.split(/\s+/)) {
+    const candidate = line ? `${line} ${word}` : word;
+    if (line && font.widthOfTextAtSize(candidate, size) > maxWidth) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = candidate;
+    }
+  }
+  if (line) lines.push(line);
+
+  const maxLines = spec.maxLines || 1;
+  if (lines.length > maxLines) {
+    lines.length = maxLines;
+    let last = lines[maxLines - 1];
+    while (last && font.widthOfTextAtSize(`${last}...`, size) > maxWidth) {
+      last = last.slice(0, -1).trimEnd();
+    }
+    lines[maxLines - 1] = `${last}...`;
+  }
+
+  const boxX = spec.x * width;
+  const lineHeight = size * 1.15;
+  lines.forEach((value, index) => {
+    const lineWidth = font.widthOfTextAtSize(value, size);
+    let x = boxX;
+    if (spec.align === 'center') x += (maxWidth - lineWidth) / 2;
+    else if (spec.align === 'right') x += maxWidth - lineWidth;
+    page.drawText(value, {
+      x,
+      y: height - (spec.y * height) - size - (index * lineHeight),
+      size,
+      maxWidth,
+      font,
+      color: pdfLibColor(spec.color || '#111111'),
+    });
   });
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { 
   ShieldCheck, 
   Search, 
@@ -23,9 +23,9 @@ import { api } from '../services/api';
 import { web3 } from '../services/web3';
 import { hashFile, formatAddressOrHash } from '../services/crypto';
 
-export default function VerificationHub({ systemStatus }) {
+export default function VerificationHub({ systemStatus, initialCertificateId = '' }) {
   const [activeMode, setActiveMode] = useState('id'); // 'id' | 'file'
-  const [certIdInput, setCertIdInput] = useState('');
+  const [certIdInput, setCertIdInput] = useState(initialCertificateId);
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null);
   const [verifyError, setVerifyError] = useState(null);
@@ -35,6 +35,7 @@ export default function VerificationHub({ systemStatus }) {
   const [computedFileHash, setComputedFileHash] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
+  const autoVerifiedCertificateId = useRef('');
 
   const triggerConfetti = () => {
     try {
@@ -79,6 +80,13 @@ export default function VerificationHub({ systemStatus }) {
       setIsVerifying(false);
     }
   };
+
+  useEffect(() => {
+    if (!initialCertificateId || autoVerifiedCertificateId.current === initialCertificateId) return;
+    autoVerifiedCertificateId.current = initialCertificateId;
+    setCertIdInput(initialCertificateId);
+    handleVerifyById(initialCertificateId);
+  }, [initialCertificateId]);
 
   // Verify by Document Upload
   const handleFileUpload = async (file) => {

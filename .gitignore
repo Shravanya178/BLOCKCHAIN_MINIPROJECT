@@ -46,7 +46,7 @@ backend/deployments/hardhat.json
 backend/deployments/localhost.json
 
 # Local demonstration assets and large binary source files
-TEMPLATES/
+/TEMPLATES/
 VESIT_participants.xlsx
 *.pdf
 *.xlsx
@@ -54,6 +54,9 @@ VESIT_participants.xlsx
 # Test coverage & reports
 coverage/
 **/coverage/
+
+# Local-only run and demonstration notes
+/docs/CERTIFIED_DEMO_GUIDE.md
 
 # Operating System & Editor caches
 .DS_Store

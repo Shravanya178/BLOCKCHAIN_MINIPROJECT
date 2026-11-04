@@ -12,7 +12,8 @@ describe('Participant spreadsheet parsing', () => {
         rowNumber: 2,
         studentName: 'Shravanya Andhale',
         studentId: 'CS-001',
-        achievement: 'Winner',
+        position: 'Winner',
+        achievement: null,
       }),
     ]);
   });
@@ -36,6 +37,43 @@ describe('Participant spreadsheet parsing', () => {
         certificateTitle: 'Participation',
       }),
     ]);
+  });
+
+  it('keeps XLSX participant columns mapped to their own fields', async () => {
+    const worksheet = XLSX.utils.aoa_to_sheet([
+      ['student_name', 'email', 'student_id', 'department', 'eventCategory', 'certificate_title', 'team_name', 'project_title', 'position'],
+      ['Yash Mehta', 'yash@example.edu', '33', 'INFT', 'Technical Workshops', 'Participation', '', '', 'Participation'],
+      ['Pooja Nair', 'pooja@example.edu', '40', 'INFT', 'Student Council', 'Participation', 'VDC', '', 'Participation'],
+    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Participants');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    const records = await parseRecipientXlsx(buffer);
+
+    expect(records[0]).toEqual(expect.objectContaining({
+      studentName: 'Yash Mehta',
+      email: 'yash@example.edu',
+      studentId: '33',
+      department: 'INFT',
+      teamName: null,
+      projectTitle: null,
+      position: 'Participation',
+      achievement: null,
+      certificateTitle: 'Participation',
+    }));
+    expect(records[1]).toEqual(expect.objectContaining({
+      studentName: 'Pooja Nair',
+      email: 'pooja@example.edu',
+      studentId: '40',
+      department: 'INFT',
+      teamName: 'VDC',
+      projectTitle: null,
+      position: 'Participation',
+      achievement: null,
+      certificateTitle: 'Participation',
+    }));
+    expect(records[0]).not.toHaveProperty('eventCategory');
   });
 
   it('rejects an XLSX workbook without data rows', async () => {

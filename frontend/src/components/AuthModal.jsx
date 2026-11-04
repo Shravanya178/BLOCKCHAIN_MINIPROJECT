@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LogIn, X, AlertCircle, Shield } from 'lucide-react';
+import { X, AlertCircle, Shield } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function AuthModal({ isOpen, onClose, onLoginSuccess }) {

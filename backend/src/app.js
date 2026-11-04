@@ -24,6 +24,9 @@ const swaggerDocument = require('./swagger.json');
 
 const app = express();
 
+// Requests arrive through one local Cloudflare Tunnel proxy when publicly exposed.
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(
   helmet({
@@ -41,7 +44,7 @@ app.use(
       if (config.corsOrigins.includes('*') || config.corsOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(null, true); // Permissive in development
+      return callback(new Error('Origin is not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],

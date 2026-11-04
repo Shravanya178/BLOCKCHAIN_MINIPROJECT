@@ -12,6 +12,7 @@ import './App.css';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState('verify'); // 'verify' | 'studio' | 'ledger' | 'contract'
+  const certificateIdFromUrl = new URLSearchParams(window.location.search).get('certificateId') || '';
   const [user, setUser] = useState(api.user);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
@@ -26,6 +27,12 @@ export default function App() {
     checkSystemStatus();
     checkExistingSession();
     autoDetectWallet();
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => setUser(null);
+    window.addEventListener('certified:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('certified:session-expired', handleSessionExpired);
   }, []);
 
   const checkSystemStatus = async () => {
@@ -106,7 +113,7 @@ export default function App() {
 
       <main className="main-content-area">
         {currentTab === 'verify' && (
-          <VerificationHub systemStatus={systemStatus} />
+          <VerificationHub systemStatus={systemStatus} initialCertificateId={certificateIdFromUrl} />
         )}
 
         {currentTab === 'studio' && (
@@ -133,7 +140,7 @@ export default function App() {
       <footer className="footer-strip">
         <div className="footer-content">
           <div className="footer-col">
-            <span className="footer-brand">VESIT Certificate Management</span>
+            <span className="footer-brand">CERTIFIED</span>
             <p className="footer-copy">Digitally authenticated certificates for VES Institute of Technology.</p>
           </div>
           <div className="footer-col text-right">
