@@ -178,6 +178,28 @@ router.post(
 );
 
 /**
+ * Preview and normalize a recipient CSV/XLSX without issuing certificates.
+ */
+router.post(
+  '/bulk/preview',
+  csvUpload,
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw AppError.badRequest('Please upload a CSV or XLSX file');
+    }
+
+    const recipients = await parseRecipientFile(req.file.buffer, req.file.originalname);
+    res.json({
+      success: true,
+      data: {
+        filename: req.file.originalname,
+        recipients,
+      },
+    });
+  }),
+);
+
+/**
  * Bulk issue certificates via CSV upload or JSON list
  */
 router.post(
@@ -204,6 +226,12 @@ router.post(
           : req.body.recipients;
       } catch {
         throw AppError.badRequest('Invalid JSON for recipients');
+      }
+      originalFilename = typeof req.body.originalFilename === 'string'
+        ? req.body.originalFilename
+        : null;
+      if (originalFilename && !/\.(csv|xlsx)$/i.test(originalFilename)) {
+        throw AppError.badRequest('originalFilename must end with .csv or .xlsx');
       }
     } else {
       throw AppError.badRequest('Please upload a CSV file or provide recipients array');

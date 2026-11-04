@@ -45,9 +45,11 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
   const [issuedSingleResult, setIssuedSingleResult] = useState(null);
   const [singleError, setSingleError] = useState(null);
 
-  // Bulk CSV Form
+  // Bulk CSV/XLSX Form
   const [csvFile, setCsvFile] = useState(null);
   const [parsedRows, setParsedRows] = useState([]);
+  const [bulkRowsEdited, setBulkRowsEdited] = useState(false);
+  const [isPreviewingBulk, setIsPreviewingBulk] = useState(false);
   const [isIssuingBulk, setIsIssuingBulk] = useState(false);
   const [bulkResult, setBulkResult] = useState(null);
   const [bulkError, setBulkError] = useState(null);
@@ -79,6 +81,20 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
   });
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [eventSuccess, setEventSuccess] = useState(null);
+
+  const validateBulkRows = (rows) => {
+    const seen = new Set();
+    return rows.map((row) => {
+      const identity = (row.id || row.name).trim().toLowerCase();
+      const duplicate = identity && seen.has(identity);
+      if (identity) seen.add(identity);
+      return {
+        ...row,
+        invalid: !row.name.trim() || duplicate,
+        error: !row.name.trim() ? 'Student name is required' : (duplicate ? 'Duplicate participant' : null),
+      };
+    });
+  };
 
   useEffect(() => {
     loadInitialData();
@@ -166,34 +182,38 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
     }
   };
 
-  // Parse CSV File in Browser for immediate preview
-  const handleCsvSelect = (file) => {
+  // Normalize CSV/XLSX through the backend parser for a consistent preview.
+  const handleCsvSelect = async (file) => {
     if (!file) return;
+    if (!/\.(csv|xlsx)$/i.test(file.name)) {
+      setBulkError('Only CSV and XLSX files are accepted.');
+      return;
+    }
+
     setCsvFile(file);
+    setParsedRows([]);
     setBulkError(null);
     setBulkResult(null);
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length <= 1) {
-        setBulkError('CSV file has no data rows.');
-        return;
-      }
-      const rows = lines.slice(1).map((line, idx) => {
-        // Simple comma split handling quotes
-        const parts = line.split(',').map(s => s.replace(/^"|"$/g, '').trim());
-        return {
-          row: idx + 1,
-          name: parts[0] || 'Unknown',
-          id: parts[1] || `ID-${idx + 1}`,
-          achievement: parts[2] || 'Participant',
-        };
-      });
-      setParsedRows(rows);
-    };
-    reader.readAsText(file);
+    setIsPreviewingBulk(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.previewBulk(formData);
+      const recipients = res.data?.recipients || [];
+      setParsedRows(validateBulkRows(recipients.map((recipient) => ({
+        row: recipient.rowNumber,
+        name: recipient.studentName || '',
+        id: recipient.studentId || '',
+        achievement: recipient.achievement || 'Participant',
+        certificateTitle: recipient.certificateTitle || '',
+      }))));
+      setBulkRowsEdited(false);
+    } catch (err) {
+      setBulkError(err.message || 'Unable to preview recipient file');
+    } finally {
+      setIsPreviewingBulk(false);
+    }
   };
 
   // Submit Bulk Issuance
@@ -203,7 +223,11 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       return;
     }
     if (!csvFile || !selectedEventId) {
-      setBulkError('Please select an event and upload a CSV file.');
+      setBulkError('Please select an event and upload a CSV or XLSX file.');
+      return;
+    }
+    if (parsedRows.some((row) => row.invalid)) {
+      setBulkError('Fix or remove rows with a missing student name before issuing.');
       return;
     }
 
@@ -217,7 +241,18 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       if (selectedTemplateId) {
         formData.append('templateId', selectedTemplateId);
       }
-      formData.append('file', csvFile);
+      if (bulkRowsEdited) {
+        formData.append('recipients', JSON.stringify(parsedRows.map((row) => ({
+          rowNumber: row.row,
+          studentName: row.name.trim(),
+          studentId: row.id.trim() || null,
+          achievement: row.achievement.trim() || null,
+          certificateTitle: row.certificateTitle?.trim() || null,
+        }))));
+        formData.append('originalFilename', csvFile.name);
+      } else {
+        formData.append('file', csvFile);
+      }
 
       const res = await api.issueBulk(formData);
       setBulkResult(res.data);
@@ -331,7 +366,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
             onClick={() => setActiveSubTab('bulk')}
           >
             <FileSpreadsheet size={16} />
-            <span>Bulk CSV Engine</span>
+            <span>Bulk CSV/XLSX Engine</span>
           </button>
 
           <button 
@@ -667,7 +702,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                 <FileSpreadsheet size={22} className="icon-cyan" />
                 <span>Bulk Certificate Issuance Engine</span>
               </h3>
-              <p className="card-sub">Upload CSV to mint 10 to 200 certificates in a single batch with automated PDF generation and blockchain anchoring.</p>
+              <p className="card-sub">Upload CSV or XLSX to mint 1 to 200 certificates in a single batch with automated PDF generation and blockchain anchoring.</p>
             </div>
             <button className="btn btn-secondary btn-sm" onClick={downloadSampleCsv}>
               <Download size={15} />
@@ -703,21 +738,21 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
             </div>
           </div>
 
-          {/* CSV File Dropzone */}
+          {/* CSV/XLSX File Dropzone */}
           <div 
             className="csv-dropzone-box"
-            onClick={() => document.getElementById('csv-file-input').click()}
+            onClick={() => document.getElementById('recipient-file-input').click()}
           >
             <input 
               type="file" 
-              id="csv-file-input" 
-              accept=".csv"
+              id="recipient-file-input"
+              accept=".csv,.xlsx"
               style={{ display: 'none' }}
               onChange={(e) => handleCsvSelect(e.target.files[0])}
             />
             <UploadCloud size={36} className="icon-cyan" />
-            <h4>{csvFile ? csvFile.name : 'Click to Upload Recipients CSV'}</h4>
-            <p>Required columns: student_name, student_id, achievement</p>
+            <h4>{isPreviewingBulk ? 'Validating recipient file...' : (csvFile ? csvFile.name : 'Click to Upload Recipients CSV or XLSX')}</h4>
+            <p>Required column: student_name. Optional: student_id, achievement, certificate_title</p>
           </div>
 
           {bulkError && (
@@ -731,11 +766,14 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
           {parsedRows.length > 0 && (
             <div className="parsed-preview-section">
               <div className="preview-count-strip">
-                <span>Validated <strong>{parsedRows.length}</strong> Recipients for Blockchain Batch</span>
+                <span>
+                  {parsedRows.some((row) => row.invalid) ? 'Review recipient errors' : 'Validated'}
+                  {' '}<strong>{parsedRows.length}</strong> Recipients for Blockchain Batch
+                </span>
                 <button 
                   className="btn btn-primary"
                   onClick={handleIssueBulk}
-                  disabled={isIssuingBulk}
+                  disabled={isIssuingBulk || isPreviewingBulk || parsedRows.some((row) => row.invalid)}
                 >
                   {isIssuingBulk ? (
                     <span>Minting {parsedRows.length} Certificates On-Chain...</span>
@@ -763,10 +801,65 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     {parsedRows.map((row) => (
                       <tr key={row.row}>
                         <td className="mono">{row.row}</td>
-                        <td className="font-semibold">{row.name}</td>
-                        <td className="mono">{row.id}</td>
-                        <td><span className="badge-gold">{row.achievement}</span></td>
-                        <td><span className="badge badge-pending">READY</span></td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.name}
+                            aria-label={`Student name for row ${row.row}`}
+                            onChange={(e) => {
+                              const name = e.target.value;
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => validateBulkRows(rows.map((item) => item.row === row.row
+                                ? { ...item, name }
+                                : item)));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field mono"
+                            value={row.id}
+                            aria-label={`Student ID for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => validateBulkRows(rows.map((item) => item.row === row.row
+                                ? { ...item, id: e.target.value }
+                                : item)));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.achievement}
+                            aria-label={`Achievement for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row
+                                ? { ...item, achievement: e.target.value }
+                                : item));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <div className="flex items-center gap-2">
+                            <span className={`badge ${row.invalid ? 'badge-danger' : 'badge-pending'}`}>
+                              {row.invalid ? 'INVALID' : 'READY'}
+                            </span>
+                            {row.error && <span className="text-red text-xs">{row.error}</span>}
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-sm"
+                              title={`Remove row ${row.row}`}
+                              onClick={() => {
+                                setBulkRowsEdited(true);
+                                setParsedRows((rows) => validateBulkRows(rows.filter((item) => item.row !== row.row)));
+                              }}
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     ))}
                   </tbody>

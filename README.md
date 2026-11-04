@@ -62,7 +62,7 @@ integration test has not completed successfully yet.
 | Authentication and roles | Implemented but not tested | JWT, password hashing, admin/teacher roles, and protected routes exist; API tests require configured database and environment variables. |
 | Event management | Implemented but not tested | Create, list, update, and archive routes exist; event category is not yet a first-class field. |
 | Template management | Partially implemented | Versioned layout JSON, background uploads, preview, and starter templates exist; the required 12-category catalogue and three named initial designs are not complete. |
-| CSV/XLSX participant upload | Partially implemented | CSV and XLSX parsing, row validation, duplicate detection, and batch records exist; interactive column mapping and correction/removal UI are not implemented. |
+| CSV/XLSX participant upload | Implemented but not fully tested | CSV and XLSX parsing, backend-normalized preview, editable participant fields, invalid-row removal, duplicate row detection, and batch records exist; end-to-end browser testing remains pending. |
 | Bulk certificate generation | Implemented but not tested | Batch issuance, idempotency, row-level status, PDF generation, and per-certificate tracking exist; the complete configured 10–15 record flow needs integration validation. |
 | PDF and QR generation | Implemented but not tested | PDFKit rendering, QR verification URLs, and final-document hashing services exist. |
 | SHA-256 integrity verification | Implemented but not tested | Hashes are calculated from PDF bytes and compared with the blockchain record; API integration is blocked by environment setup. |
@@ -72,7 +72,7 @@ integration test has not completed successfully yet.
 | Dashboard and issuance tracking | Partially implemented | Studio dashboard, ledger, batch statuses, and audit APIs exist; analytics and required filters are incomplete. |
 | Reissue and replacement lifecycle | Not implemented | Existing records are not overwritten, but no explicit reissue relationship or workflow exists. |
 | Sepolia wallet workflow | Partially implemented | Frontend wallet connection and network switching exist; Sepolia deployment and end-to-end MetaMask transaction validation remain. |
-| Automated backend integration tests | Blocked by configuration | Test code exists, but it requires a configured PostgreSQL database, local chain, contract deployment, and backend `.env`. |
+| Automated backend integration tests | Blocked by configuration | The local chain and contract deployment are validated; the test still requires a configured PostgreSQL database, seeded accounts, and backend `.env`. |
 | Frontend lint/build validation | Blocked by environment | Node.js `20.18.1` is below the toolchain's declared `20.19+` requirement and npm skipped native optional bindings. |
 
 ### Dependency-Based Implementation Order
@@ -164,6 +164,21 @@ npm start
 - **Interactive Swagger Docs:** `http://localhost:4000/api/docs`
 - **Health Check:** `http://localhost:4000/health`
 - **Readiness Check:** `http://localhost:4000/ready`
+
+### 8. Run the configured integration workflow
+
+After PostgreSQL is configured, the database is migrated and seeded, the local
+chain is running, and `deployments/localhost.json` exists:
+
+```powershell
+cd backend
+npm run test:api -- --runInBand test/api/e2e.test.js
+```
+
+This workflow creates temporary event and certificate records, verifies PDF
+hashes, exercises bulk issuance, and tests revocation. It does not reset the
+database. Without PostgreSQL and `backend/.env`, it is expected to remain
+blocked rather than report a false pass.
 
 ---
 

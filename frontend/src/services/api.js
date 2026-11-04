@@ -188,6 +188,13 @@ class ApiClient {
     });
   }
 
+  async previewBulk(formData) {
+    return this.request('/certificates/bulk/preview', {
+      method: 'POST',
+      body: formData,
+    });
+  }
+
   async getCertificates(params = {}) {
     const query = new URLSearchParams(params).toString();
     return this.request(`/certificates${query ? `?${query}` : ''}`);
