@@ -106,6 +106,21 @@ async function verifyCertificateById(certificateId) {
     };
   }
 
+  if (chainData.validUntil > 0 && Math.floor(Date.now() / 1000) >= chainData.validUntil) {
+    return {
+      status: 'EXPIRED',
+      message: 'This certificate has passed its validity date',
+      certificateId,
+      isVerified: false,
+      details: {
+        recipientName: dbCert.recipientName,
+        eventName: dbCert.event.name,
+        institutionName: dbCert.event.institutionName,
+        validUntil: new Date(chainData.validUntil * 1000),
+      },
+    };
+  }
+
   // Compare Hashes
   if (!hashesEqual(dbCert.documentHash, chainData.documentHash)) {
     return {
@@ -198,6 +213,16 @@ async function verifyDocument(pdfBuffer) {
     return {
       status: 'REVOKED',
       message: 'Certificate found but has been revoked',
+      certificateId: dbCert.certificateId,
+      computedHash,
+      isVerified: false,
+    };
+  }
+
+  if (chainData.validUntil > 0 && Math.floor(Date.now() / 1000) >= chainData.validUntil) {
+    return {
+      status: 'EXPIRED',
+      message: 'This certificate has passed its validity date',
       certificateId: dbCert.certificateId,
       computedHash,
       isVerified: false,

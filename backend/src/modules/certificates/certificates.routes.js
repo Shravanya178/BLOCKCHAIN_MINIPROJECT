@@ -12,7 +12,7 @@ const storage = require('../../services/storage.service');
 const pinata = require('../../services/pinata.service');
 const { paginationSchema, toPrisma, meta } = require('../../utils/pagination');
 const { isUuid, dateOnly } = require('../../validators/common');
-const { parseRecipientCsv } = require('./csv.parser');
+const { parseRecipientFile } = require('./csv.parser');
 const service = require('./certificates.service');
 
 const router = express.Router();
@@ -195,7 +195,7 @@ router.post(
     if (req.file) {
       // Process uploaded CSV
       originalFilename = req.file.originalname;
-      recipients = await parseRecipientCsv(req.file.buffer);
+      recipients = await parseRecipientFile(req.file.buffer, req.file.originalname);
     } else if (req.body.recipients) {
       // JSON array of recipients
       try {

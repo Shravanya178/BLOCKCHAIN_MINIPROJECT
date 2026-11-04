@@ -27,6 +27,8 @@ router.get(
         ? 404
         : result.status === 'REVOKED'
         ? 410 // Gone / Revoked
+        : result.status === 'EXPIRED'
+        ? 410 // Gone / Expired
         : result.status === 'VERIFICATION_UNAVAILABLE'
         ? 503
         : 400;
@@ -59,6 +61,8 @@ router.post(
         : result.status === 'NOT_FOUND'
         ? 404
         : result.status === 'REVOKED'
+        ? 410
+        : result.status === 'EXPIRED'
         ? 410
         : result.status === 'HASH_MISMATCH'
         ? 422

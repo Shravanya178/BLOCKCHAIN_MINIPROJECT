@@ -8,9 +8,12 @@ export const CONTRACT_ABI = [
   "error CertificateIdTooLong()",
   "error CertificateNotFound(string certificateId)",
   "error EmptyCertificateId()",
+  "error ExpiryMustBeInTheFuture()",
+  "error InvalidAdmin()",
   "error InvalidDocumentHash()",
+  "error InvalidIssuer()",
   "error NotAuthorizedToRevoke(string certificateId, address caller)",
-  "event CertificateRegistered(bytes32 indexed certificateKey, string certificateId, bytes32 indexed documentHash, address indexed issuer, uint64 issuedAt)",
+  "event CertificateRegistered(bytes32 indexed certificateKey, string certificateId, bytes32 indexed documentHash, address indexed issuer, uint64 issuedAt, uint64 validUntil)",
   "event CertificateRevoked(bytes32 indexed certificateKey, string certificateId, address indexed revokedBy, uint64 revokedAt)",
   "event RoleAdminChanged(bytes32 indexed role, bytes32 indexed previousAdminRole, bytes32 indexed newAdminRole)",
   "event RoleGranted(bytes32 indexed role, address indexed account, address indexed sender)",
@@ -19,17 +22,19 @@ export const CONTRACT_ABI = [
   "function ISSUER_ROLE() view returns (bytes32)",
   "function certificateExists(string certificateId) view returns (bool)",
   "function certificateKey(string certificateId) pure returns (bytes32)",
-  "function getCertificate(string certificateId) view returns (bool exists, bytes32 documentHash, address issuer, uint64 issuedAt, bool revoked, uint64 revokedAt)",
+  "function getCertificate(string certificateId) view returns (bool exists, bytes32 documentHash, address issuer, uint64 issuedAt, bool revoked, uint64 revokedAt, uint64 validUntil)",
   "function getRoleAdmin(bytes32 role) view returns (bytes32)",
   "function grantRole(bytes32 role, address account)",
   "function hasRole(bytes32 role, address account) view returns (bool)",
   "function registerCertificate(string certificateId, bytes32 documentHash)",
+  "function registerCertificateWithExpiry(string certificateId, bytes32 documentHash, uint64 validUntil)",
   "function renounceRole(bytes32 role, address callerConfirmation)",
   "function revokeCertificate(string certificateId)",
   "function revokeRole(bytes32 role, address account)",
   "function supportsInterface(bytes4 interfaceId) view returns (bool)",
   "function totalCertificates() view returns (uint256)",
-  "function verifyCertificate(string certificateId, bytes32 documentHash) view returns (bool valid, bool revoked)"
+  "function verifyCertificate(string certificateId, bytes32 documentHash) view returns (bool valid, bool revoked, bool expired)",
+  "function isCertificateExpired(string certificateId) view returns (bool)"
 ];
 
 // Fallback ABI for root contract if testing directly with root Solidity interface

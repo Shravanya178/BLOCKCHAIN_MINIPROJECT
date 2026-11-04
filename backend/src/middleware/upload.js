@@ -11,9 +11,18 @@ const csvUpload = multer({
   storage,
   limits: { fileSize: config.limits.csvBytes, files: 1, fields: 10 },
   fileFilter: (_req, file, cb) => {
-    const okName = /\.csv$/i.test(file.originalname);
-    const okType = ['text/csv', 'application/vnd.ms-excel', 'text/plain', 'application/octet-stream'].includes(file.mimetype);
-    if (!okName || !okType) return cb(new AppError(415, 'UNSUPPORTED_FILE_TYPE', 'Only .csv files are accepted'));
+    const isCsv = /\.csv$/i.test(file.originalname);
+    const isXlsx = /\.xlsx$/i.test(file.originalname);
+    const okType = [
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain',
+      'application/octet-stream',
+    ].includes(file.mimetype);
+    if ((!isCsv && !isXlsx) || !okType) {
+      return cb(new AppError(415, 'UNSUPPORTED_FILE_TYPE', 'Only .csv and .xlsx files are accepted'));
+    }
     return cb(null, true);
   },
 }).single('file');

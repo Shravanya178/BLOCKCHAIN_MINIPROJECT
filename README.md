@@ -43,6 +43,53 @@ flowchart TD
 3. **No Personal Data on Blockchain**: Only the `certificateId`, document `hash (bytes32)`, `issuer`, and `timestamps` are stored on the blockchain. Student identifiers, names, and contact details remain strictly in the secure PostgreSQL database.
 4. **Authoritative Blockchain Truth**: A certificate is never marked as verified unless confirmed by the smart contract.
 
+## ✅ Feature-Completion Matrix
+
+The product requirements and milestone plan are maintained in
+[docs/PROJECT_REQUIREMENTS.md](docs/PROJECT_REQUIREMENTS.md). Visual template
+assets are intentionally pending until supplied.
+
+This matrix is based on the implementation currently present on `main` and the
+validation commands listed in the testing section. "Implemented but not
+tested" means the code path exists, but its required external configuration or
+integration test has not completed successfully yet.
+
+| Area | Status | Evidence / gap |
+|---|---|---|
+| Solidity certificate registration | Implemented and verified | Hardhat suite passes 16 tests, including duplicate IDs, issuer authorization, expiry, and invalid constructor addresses. |
+| Blockchain revocation | Implemented and verified | Contract tests cover original issuer, admin, unauthorized callers, and repeat revocation. |
+| Certificate expiry | Implemented but not tested end-to-end | The contract supports optional future expiry timestamps and expiry-aware verification; the existing issuance API does not yet expose an expiry policy field. |
+| Authentication and roles | Implemented but not tested | JWT, password hashing, admin/teacher roles, and protected routes exist; API tests require configured database and environment variables. |
+| Event management | Implemented but not tested | Create, list, update, and archive routes exist; event category is not yet a first-class field. |
+| Template management | Partially implemented | Versioned layout JSON, background uploads, preview, and starter templates exist; the required 12-category catalogue and three named initial designs are not complete. |
+| CSV/XLSX participant upload | Partially implemented | CSV and XLSX parsing, row validation, duplicate detection, and batch records exist; interactive column mapping and correction/removal UI are not implemented. |
+| Bulk certificate generation | Implemented but not tested | Batch issuance, idempotency, row-level status, PDF generation, and per-certificate tracking exist; the complete configured 10–15 record flow needs integration validation. |
+| PDF and QR generation | Implemented but not tested | PDFKit rendering, QR verification URLs, and final-document hashing services exist. |
+| SHA-256 integrity verification | Implemented but not tested | Hashes are calculated from PDF bytes and compared with the blockchain record; API integration is blocked by environment setup. |
+| IPFS storage | Implemented but not tested | Pinata service and storage driver exist; Pinata credentials and a privacy decision are still required. |
+| Public ID verification | Implemented but not tested | Public ID and document verification routes exist without authentication. |
+| Public verification UI | Partially implemented | React verification hub and upload flow exist; final browser build is currently blocked by missing native Vite/Oxlint optional bindings. |
+| Dashboard and issuance tracking | Partially implemented | Studio dashboard, ledger, batch statuses, and audit APIs exist; analytics and required filters are incomplete. |
+| Reissue and replacement lifecycle | Not implemented | Existing records are not overwritten, but no explicit reissue relationship or workflow exists. |
+| Sepolia wallet workflow | Partially implemented | Frontend wallet connection and network switching exist; Sepolia deployment and end-to-end MetaMask transaction validation remain. |
+| Automated backend integration tests | Blocked by configuration | Test code exists, but it requires a configured PostgreSQL database, local chain, contract deployment, and backend `.env`. |
+| Frontend lint/build validation | Blocked by environment | Node.js `20.18.1` is below the toolchain's declared `20.19+` requirement and npm skipped native optional bindings. |
+
+### Dependency-Based Implementation Order
+
+1. Make local development reproducible: document safe test environment setup,
+   add a local-chain/API test bootstrap, and validate frontend tooling on a
+   supported Node version.
+2. Complete the domain model: event categories, certificate types, validity
+   policy, template catalogue, immutable issuance snapshots, and reissue
+   relationships.
+3. Complete participant ingestion: XLSX support, column mapping, event-specific
+   validation, and correction/removal workflow.
+4. Add certificate expiry and lifecycle rules to the contract, backend, and
+   verification responses.
+5. Validate the end-to-end local demo with 10–15 certificates before enabling
+   Pinata and Sepolia demonstration configuration.
+
 ---
 
 ## 💻 Tech Stack

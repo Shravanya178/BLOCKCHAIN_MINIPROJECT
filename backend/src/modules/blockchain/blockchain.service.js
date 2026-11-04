@@ -103,7 +103,7 @@ class BlockchainService {
   async getCertificateFromChain(certificateId) {
     const contract = this.getContract(true);
     try {
-      const [exists, documentHash, issuer, issuedAt, revoked, revokedAt] = await contract.getCertificate(certificateId);
+      const [exists, documentHash, issuer, issuedAt, revoked, revokedAt, validUntil] = await contract.getCertificate(certificateId);
       return {
         exists,
         documentHash: documentHash === ethers.ZeroHash ? null : documentHash,
@@ -111,6 +111,7 @@ class BlockchainService {
         issuedAt: Number(issuedAt),
         revoked,
         revokedAt: Number(revokedAt),
+        validUntil: Number(validUntil),
         contractAddress: await contract.getAddress(),
         network: config.blockchain.network,
         chainId: config.blockchain.chainId,
@@ -121,7 +122,7 @@ class BlockchainService {
     }
   }
 
-  async registerCertificateOnChain(certificateId, documentHash) {
+  async registerCertificateOnChain(certificateId, documentHash, validUntil = 0) {
     if (!documentHash || !documentHash.startsWith('0x') || documentHash.length !== 66) {
       throw AppError.badRequest('Invalid document hash for blockchain registration');
     }
@@ -145,7 +146,9 @@ class BlockchainService {
       }
 
       // Submit transaction
-      const tx = await contract.registerCertificate(certificateId, documentHash);
+      const tx = validUntil > 0
+        ? await contract.registerCertificateWithExpiry(certificateId, documentHash, validUntil)
+        : await contract.registerCertificate(certificateId, documentHash);
       logger.info('Submitted certificate registration tx', { certificateId, txHash: tx.hash });
 
       // Wait for confirmation

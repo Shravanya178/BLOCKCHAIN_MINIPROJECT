@@ -15,6 +15,23 @@ const { toPrisma, meta } = require('../../utils/pagination');
 const { isUuid } = require('../../validators/common');
 const audit = require('../audit/audit.service');
 
+function resolveValidityDate(event, issueDate) {
+  if (event.validityPolicy === 'PERMANENT') return null;
+
+  let validUntil;
+  if (event.validityPolicy === 'DAYS_AFTER_ISSUE') {
+    validUntil = new Date(issueDate.getTime() + event.validityDays * 24 * 60 * 60 * 1000);
+  } else {
+    validUntil = new Date(event.validUntil);
+    validUntil.setUTCHours(23, 59, 59, 0);
+  }
+
+  if (Number.isNaN(validUntil.getTime()) || validUntil.getTime() <= Date.now()) {
+    throw AppError.validation('Certificate validity policy resolves to a date in the past');
+  }
+  return validUntil;
+}
+
 /**
  * Ensures or creates a Recipient record.
  */
@@ -136,6 +153,7 @@ async function issueSingleCertificate(actorUser, payload, ip) {
 
   const certificateId = await generateUniqueCertificateId();
   const issueDate = payload.issueDate ? new Date(`${payload.issueDate}T00:00:00.000Z`) : new Date();
+  const validUntil = resolveValidityDate(event, issueDate);
 
   // Create certificate record in PENDING status
   let cert = await prisma.certificate.create({
@@ -150,6 +168,7 @@ async function issueSingleCertificate(actorUser, payload, ip) {
       certificateTitle: payload.certificateTitle || template.name,
       achievement: payload.achievement || null,
       issueDate,
+      validUntil,
       status: 'PENDING',
       verificationUrl: buildVerificationUrl(certificateId),
     },
@@ -196,6 +215,7 @@ async function issueSingleCertificate(actorUser, payload, ip) {
     const chainResult = await blockchainService.registerCertificateOnChain(
       cert.certificateId,
       cert.documentHash,
+      cert.validUntil ? Math.floor(cert.validUntil.getTime() / 1000) : 0,
     );
 
     // 3. Mark Confirmed
@@ -439,7 +459,9 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
       eventId: event.id,
       templateId: template.id,
       createdById: actorUser.id,
-      source: originalFilename ? 'CSV' : 'SINGLE',
+      source: originalFilename
+        ? (originalFilename.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'CSV')
+        : 'SINGLE',
       idempotencyKey: idempotencyKey || null,
       originalFilename: originalFilename || null,
       totalRows: recipients.length,
@@ -480,6 +502,7 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
 
       const certificateId = await generateUniqueCertificateId();
       const issueDate = item.issueDate ? new Date(`${item.issueDate}T00:00:00.000Z`) : new Date();
+      const validUntil = resolveValidityDate(event, issueDate);
 
       let cert = await prisma.certificate.create({
         data: {
@@ -494,6 +517,7 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
           certificateTitle: item.certificateTitle || template.name,
           achievement: item.achievement || null,
           issueDate,
+          validUntil,
           status: 'PENDING',
           verificationUrl: buildVerificationUrl(certificateId),
           rowNumber: rowNum,
@@ -523,6 +547,7 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
       const chainResult = await blockchainService.registerCertificateOnChain(
         cert.certificateId,
         cert.documentHash,
+        cert.validUntil ? Math.floor(cert.validUntil.getTime() / 1000) : 0,
       );
 
       cert = await prisma.certificate.update({

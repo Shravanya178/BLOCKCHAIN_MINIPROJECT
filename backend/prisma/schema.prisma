@@ -25,6 +25,55 @@ enum EventStatus {
   ARCHIVED
 }
 
+enum EventCategory {
+  TECHNICAL_WORKSHOPS
+  HACKATHONS
+  SYMPOSIUMS
+  SEMINARS
+  FACULTY_DEVELOPMENT
+  CULTURAL
+  SPORTS
+  CLUBS_VOLUNTEERING
+  SOCIAL_OUTREACH
+  ENTREPRENEURSHIP
+  CAREER_DEVELOPMENT
+  ACADEMIC_RECOGNITION
+}
+
+enum CertificateType {
+  PARTICIPATION
+  COMPLETION
+  EXCELLENCE
+  WINNER
+  RUNNER_UP
+  FINALIST
+  BEST_PAPER
+  PAPER_PRESENTATION
+  POSTER_PRESENTATION
+  RESOURCE_PERSON
+  SPEAKER
+  MENTOR
+  COORDINATOR
+  ORGANIZING_COMMITTEE
+  BEST_PERFORMER
+  CORE_TEAM_MEMBER
+  VOLUNTEER_APPRECIATION
+  LEADERSHIP_CONTRIBUTION
+  INNOVATION_AWARD
+  PROJECT_SHOWCASE
+  INDUSTRY_VISIT
+  MERIT
+  ACHIEVEMENT
+  RESEARCH_CONTRIBUTION
+  OUTSTANDING_CONTRIBUTION
+}
+
+enum ValidityPolicy {
+  PERMANENT
+  DAYS_AFTER_ISSUE
+  UNTIL_DATE
+}
+
 enum TemplateCategory {
   PARTICIPATION
   ACHIEVEMENT
@@ -45,6 +94,7 @@ enum CertificateStatus {
 enum BatchSource {
   SINGLE
   CSV
+  XLSX
 }
 
 enum BatchStatus {
@@ -115,6 +165,11 @@ model Event {
   institutionName   String
   signatoryName     String?
   signatoryTitle    String?
+  category          EventCategory?
+  certificateType   CertificateType?
+  validityPolicy    ValidityPolicy   @default(PERMANENT)
+  validityDays      Int?
+  validUntil        DateTime?        @db.Date
   status            EventStatus @default(ACTIVE)
   createdById       String      @db.Uuid
   issuerId          String      @db.Uuid
@@ -218,6 +273,7 @@ model Certificate {
   certificateTitle  String
   achievement       String?
   issueDate         DateTime          @db.Date
+  validUntil        DateTime?         @db.Date
   status            CertificateStatus @default(PENDING)
   documentHash      String?           @unique
   storageKey        String?

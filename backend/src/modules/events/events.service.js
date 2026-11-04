@@ -19,6 +19,7 @@ const serialize = (e) => ({
   ...e,
   eventDate: formatDateOnly(e.eventDate),
   endDate: formatDateOnly(e.endDate),
+  validUntil: formatDateOnly(e.validUntil),
 });
 
 async function getEventOrThrow(eventId) {

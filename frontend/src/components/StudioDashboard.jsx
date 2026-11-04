@@ -71,6 +71,11 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
     institutionName: 'Institute of Engineering and Technology',
     signatoryName: 'Dr. R. K. Sharma',
     signatoryTitle: 'Dean of Academic Affairs',
+    category: 'HACKATHONS',
+    certificateType: 'PARTICIPATION',
+    validityPolicy: 'PERMANENT',
+    validityDays: '',
+    validUntil: '',
   });
   const [isCreatingEvent, setIsCreatingEvent] = useState(false);
   const [eventSuccess, setEventSuccess] = useState(null);
@@ -263,8 +268,17 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
     setIsCreatingEvent(true);
     setEventSuccess(null);
     try {
-      const res = await api.createEvent({
+      const eventData = {
         ...eventForm,
+        validityDays: eventForm.validityPolicy === 'DAYS_AFTER_ISSUE'
+          ? Number(eventForm.validityDays)
+          : undefined,
+        validUntil: eventForm.validityPolicy === 'UNTIL_DATE'
+          ? eventForm.validUntil
+          : undefined,
+      };
+      const res = await api.createEvent({
+        ...eventData,
         defaultTemplateId: selectedTemplateId || undefined,
       });
       setEventSuccess(`Event "${res.data?.name || eventForm.name}" created successfully!`);
@@ -398,6 +412,97 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     ))
                   )}
                 </select>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group flex-1">
+                  <label className="field-label">Event Category</label>
+                  <select
+                    className="input-field"
+                    value={eventForm.category}
+                    onChange={(e) => setEventForm({ ...eventForm, category: e.target.value })}
+                    required
+                  >
+                    <option value="HACKATHONS">Hackathon</option>
+                    <option value="TECHNICAL_WORKSHOPS">Workshop</option>
+                    <option value="SYMPOSIUMS">Symposium</option>
+                    <option value="SEMINARS">Seminar</option>
+                    <option value="FACULTY_DEVELOPMENT">Faculty Development</option>
+                    <option value="CULTURAL">Cultural</option>
+                    <option value="SPORTS">Sports</option>
+                    <option value="CLUBS_VOLUNTEERING">Clubs and Volunteering</option>
+                    <option value="SOCIAL_OUTREACH">Social Outreach</option>
+                    <option value="ENTREPRENEURSHIP">Entrepreneurship</option>
+                    <option value="CAREER_DEVELOPMENT">Career Development</option>
+                    <option value="ACADEMIC_RECOGNITION">Academic Recognition</option>
+                  </select>
+                </div>
+
+                <div className="form-group flex-1">
+                  <label className="field-label">Certificate Type</label>
+                  <select
+                    className="input-field"
+                    value={eventForm.certificateType}
+                    onChange={(e) => setEventForm({ ...eventForm, certificateType: e.target.value })}
+                    required
+                  >
+                    <option value="PARTICIPATION">Participation</option>
+                    <option value="COMPLETION">Completion</option>
+                    <option value="WINNER">Winner</option>
+                    <option value="RUNNER_UP">Runner-up</option>
+                    <option value="FINALIST">Finalist</option>
+                    <option value="BEST_PAPER">Best Paper</option>
+                    <option value="RESOURCE_PERSON">Resource Person</option>
+                    <option value="COORDINATOR">Coordinator</option>
+                    <option value="VOLUNTEER_APPRECIATION">Volunteer Appreciation</option>
+                    <option value="MERIT">Merit</option>
+                    <option value="ACHIEVEMENT">Achievement</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group flex-1">
+                  <label className="field-label">Certificate Validity</label>
+                  <select
+                    className="input-field"
+                    value={eventForm.validityPolicy}
+                    onChange={(e) => setEventForm({ ...eventForm, validityPolicy: e.target.value })}
+                    required
+                  >
+                    <option value="PERMANENT">Permanent</option>
+                    <option value="DAYS_AFTER_ISSUE">Expires after days</option>
+                    <option value="UNTIL_DATE">Valid until date</option>
+                  </select>
+                </div>
+
+                {eventForm.validityPolicy === 'DAYS_AFTER_ISSUE' && (
+                  <div className="form-group flex-1">
+                    <label className="field-label">Validity Days</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="3650"
+                      className="input-field"
+                      value={eventForm.validityDays}
+                      onChange={(e) => setEventForm({ ...eventForm, validityDays: e.target.value })}
+                      required
+                    />
+                  </div>
+                )}
+
+                {eventForm.validityPolicy === 'UNTIL_DATE' && (
+                  <div className="form-group flex-1">
+                    <label className="field-label">Valid Until</label>
+                    <input
+                      type="date"
+                      className="input-field"
+                      value={eventForm.validUntil}
+                      onChange={(e) => setEventForm({ ...eventForm, validUntil: e.target.value })}
+                      required
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="form-row">

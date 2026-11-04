@@ -21,8 +21,8 @@ class Web3Service {
   }
 
   getReadOnlyProvider() {
-    // Fallback to local hardhat node or sepolia public RPC
-    return new ethers.JsonRpcProvider('http://127.0.0.1:8545');
+    const rpcUrl = import.meta.env.VITE_RPC_URL || NETWORKS[31337].rpcUrls[0];
+    return new ethers.JsonRpcProvider(rpcUrl);
   }
 
   async connectWallet() {
@@ -86,14 +86,16 @@ class Web3Service {
       issuedAt: Number(result[3]),
       revoked: result[4],
       revokedAt: Number(result[5]),
+      validUntil: Number(result[6]),
+      expired: Number(result[6]) > 0 && Math.floor(Date.now() / 1000) >= Number(result[6]),
       contractAddress: this.contractAddress,
     };
   }
 
   async verifyCertificateOnChain(certificateId, documentHash) {
     const contract = this.getContract(false);
-    const [valid, revoked] = await contract.verifyCertificate(certificateId, documentHash);
-    return { valid, revoked };
+    const [valid, revoked, expired] = await contract.verifyCertificate(certificateId, documentHash);
+    return { valid, revoked, expired };
   }
 
   async getTotalCertificates() {
@@ -131,6 +133,22 @@ class Web3Service {
     if (!this.signer) throw new Error('Wallet not connected');
     const contract = this.getContract(true);
     const tx = await contract.registerCertificate(certificateId, documentHash);
+    const receipt = await tx.wait(1);
+    return {
+      txHash: tx.hash,
+      blockNumber: receipt.blockNumber,
+      gasUsed: receipt.gasUsed.toString(),
+    };
+  }
+
+  async registerCertificateWithExpiryDirect(certificateId, documentHash, validUntil) {
+    if (!this.signer) throw new Error('Wallet not connected');
+    if (!Number.isInteger(validUntil) || validUntil <= Math.floor(Date.now() / 1000)) {
+      throw new Error('Certificate expiry must be a future Unix timestamp');
+    }
+
+    const contract = this.getContract(true);
+    const tx = await contract.registerCertificateWithExpiry(certificateId, documentHash, validUntil);
     const receipt = await tx.wait(1);
     return {
       txHash: tx.hash,

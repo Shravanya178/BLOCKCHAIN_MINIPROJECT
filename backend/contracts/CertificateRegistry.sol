@@ -19,6 +19,7 @@ contract CertificateRegistry is AccessControl {
         bytes32 documentHash; // SHA-256 of the finalized PDF bytes
         address issuer;       // wallet that registered it
         uint64 issuedAt;      // block timestamp of registration
+        uint64 validUntil;    // 0 means no expiry
         uint64 revokedAt;     // 0 when not revoked
         bool revoked;
         bool exists;
@@ -35,13 +36,17 @@ contract CertificateRegistry is AccessControl {
     error CertificateNotFound(string certificateId);
     error CertificateAlreadyRevoked(string certificateId);
     error NotAuthorizedToRevoke(string certificateId, address caller);
+    error InvalidAdmin();
+    error InvalidIssuer();
+    error ExpiryMustBeInTheFuture();
 
     event CertificateRegistered(
         bytes32 indexed certificateKey,
         string certificateId,
         bytes32 indexed documentHash,
         address indexed issuer,
-        uint64 issuedAt
+        uint64 issuedAt,
+        uint64 validUntil
     );
 
     event CertificateRevoked(
@@ -56,6 +61,8 @@ contract CertificateRegistry is AccessControl {
      * @param issuer receives ISSUER_ROLE (may equal admin)
      */
     constructor(address admin, address issuer) {
+        if (admin == address(0)) revert InvalidAdmin();
+        if (issuer == address(0)) revert InvalidIssuer();
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(ISSUER_ROLE, issuer);
     }
@@ -68,6 +75,31 @@ contract CertificateRegistry is AccessControl {
         external
         onlyRole(ISSUER_ROLE)
     {
+        _registerCertificate(certificateId, documentHash, 0);
+    }
+
+    /**
+     * @notice Register a certificate with an optional expiry timestamp.
+     * @dev `validUntil` must be a future Unix timestamp. Use the existing
+     *      two-argument function for certificates that do not expire.
+     */
+    function registerCertificateWithExpiry(
+        string calldata certificateId,
+        bytes32 documentHash,
+        uint64 validUntil
+    )
+        external
+        onlyRole(ISSUER_ROLE)
+    {
+        if (validUntil <= block.timestamp) revert ExpiryMustBeInTheFuture();
+        _registerCertificate(certificateId, documentHash, validUntil);
+    }
+
+    function _registerCertificate(
+        string calldata certificateId,
+        bytes32 documentHash,
+        uint64 validUntil
+    ) private {
         uint256 len = bytes(certificateId).length;
         if (len == 0) revert EmptyCertificateId();
         if (len > 64) revert CertificateIdTooLong();
@@ -81,6 +113,7 @@ contract CertificateRegistry is AccessControl {
             documentHash: documentHash,
             issuer: msg.sender,
             issuedAt: nowTs,
+            validUntil: validUntil,
             revokedAt: 0,
             revoked: false,
             exists: true
@@ -88,7 +121,7 @@ contract CertificateRegistry is AccessControl {
         unchecked {
             totalCertificates++;
         }
-        emit CertificateRegistered(key, certificateId, documentHash, msg.sender, nowTs);
+        emit CertificateRegistered(key, certificateId, documentHash, msg.sender, nowTs, validUntil);
     }
 
     /// @notice Revocable by the original issuer (while it still holds ISSUER_ROLE) or by an admin.
@@ -122,20 +155,31 @@ contract CertificateRegistry is AccessControl {
             address issuer,
             uint64 issuedAt,
             bool revoked,
-            uint64 revokedAt
+            uint64 revokedAt,
+            uint64 validUntil
         )
     {
         Certificate memory c = _certificates[keccak256(bytes(certificateId))];
-        return (c.exists, c.documentHash, c.issuer, c.issuedAt, c.revoked, c.revokedAt);
+        return (c.exists, c.documentHash, c.issuer, c.issuedAt, c.revoked, c.revokedAt, c.validUntil);
     }
 
     /// @notice Convenience check: registered, not revoked and hash matches.
     function verifyCertificate(string calldata certificateId, bytes32 documentHash)
         external
         view
-        returns (bool valid, bool revoked)
+        returns (bool valid, bool revoked, bool expired)
     {
         Certificate memory c = _certificates[keccak256(bytes(certificateId))];
-        return (c.exists && !c.revoked && c.documentHash == documentHash, c.revoked);
+        bool isExpired = c.validUntil != 0 && block.timestamp >= c.validUntil;
+        return (c.exists && !c.revoked && !isExpired && c.documentHash == documentHash, c.revoked, isExpired);
+    }
+
+    function isCertificateExpired(string calldata certificateId)
+        external
+        view
+        returns (bool)
+    {
+        Certificate memory c = _certificates[keccak256(bytes(certificateId))];
+        return c.exists && c.validUntil != 0 && block.timestamp >= c.validUntil;
     }
 }

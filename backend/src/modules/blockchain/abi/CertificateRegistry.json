@@ -83,7 +83,22 @@
     },
     {
       "inputs": [],
+      "name": "ExpiryMustBeInTheFuture",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidAdmin",
+      "type": "error"
+    },
+    {
+      "inputs": [],
       "name": "InvalidDocumentHash",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "InvalidIssuer",
       "type": "error"
     },
     {
@@ -133,6 +148,12 @@
           "indexed": false,
           "internalType": "uint64",
           "name": "issuedAt",
+          "type": "uint64"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint64",
+          "name": "validUntil",
           "type": "uint64"
         }
       ],
@@ -348,6 +369,11 @@
           "internalType": "uint64",
           "name": "revokedAt",
           "type": "uint64"
+        },
+        {
+          "internalType": "uint64",
+          "name": "validUntil",
+          "type": "uint64"
         }
       ],
       "stateMutability": "view",
@@ -420,6 +446,25 @@
           "internalType": "string",
           "name": "certificateId",
           "type": "string"
+        }
+      ],
+      "name": "isCertificateExpired",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "certificateId",
+          "type": "string"
         },
         {
           "internalType": "bytes32",
@@ -428,6 +473,29 @@
         }
       ],
       "name": "registerCertificate",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "certificateId",
+          "type": "string"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "documentHash",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "uint64",
+          "name": "validUntil",
+          "type": "uint64"
+        }
+      ],
+      "name": "registerCertificateWithExpiry",
       "outputs": [],
       "stateMutability": "nonpayable",
       "type": "function"
@@ -536,6 +604,11 @@
         {
           "internalType": "bool",
           "name": "revoked",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "expired",
           "type": "bool"
         }
       ],
