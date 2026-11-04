@@ -48,13 +48,35 @@ const customText = textField.extend({ text: z.string().min(1).max(500) });
 const FIELD_NAMES = [
   'studentName', 'studentId', 'eventName', 'eventDate', 'issueDate', 'achievement',
   'certificateTitle', 'organizingBody', 'institutionName', 'issuerName',
-  'signatoryName', 'signatoryTitle', 'venue', 'certificateId', 'verificationUrl',
+  'signatoryName', 'signatoryDesignation', 'signatoryTitle', 'venue', 'department',
+  'certificateType', 'teamName', 'projectTitle', 'position', 'certificateId', 'verificationUrl',
+  'qrCode', 'signatureImage', 'institutionLogo',
 ];
+
+const fieldPolicySet = z.object({
+  required: z.array(z.enum(FIELD_NAMES)).default([]),
+  optional: z.array(z.enum(FIELD_NAMES)).default([]),
+  hidden: z.array(z.enum(FIELD_NAMES)).default([]),
+});
 
 const layoutSchema = z
   .object({
     fields: z.object(Object.fromEntries(FIELD_NAMES.map((f) => [f, textField.optional()]))).strict(),
     customTexts: z.array(customText).max(10).default([]),
+    fieldPolicy: z.object({
+      required: z.array(z.enum(FIELD_NAMES)).default(['studentName']),
+      optional: z.array(z.enum(FIELD_NAMES)).default([]),
+      hidden: z.array(z.enum(FIELD_NAMES)).default([]),
+      byCertificateType: z.record(fieldPolicySet).default({}),
+      byEventCategory: z.record(fieldPolicySet).default({}),
+    }).default({ required: ['studentName'], optional: [], hidden: [], byCertificateType: {}, byEventCategory: {} }),
+    redactRegions: z.array(z.object({
+      x: frac,
+      y: frac,
+      width: frac.refine((v) => v > 0, 'width must be > 0'),
+      height: frac.refine((v) => v > 0, 'height must be > 0'),
+      color: hexColor.default('#FFFFFF'),
+    })).max(10).default([]),
     qrCode: z.object({
       x: frac,
       y: frac,

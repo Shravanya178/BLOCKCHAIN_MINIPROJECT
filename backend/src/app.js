@@ -19,6 +19,7 @@ const templatesRoutes = require('./modules/templates/templates.routes');
 const certificatesRoutes = require('./modules/certificates/certificates.routes');
 const verificationRoutes = require('./modules/verification/verification.routes');
 const auditRoutes = require('./modules/audit/audit.routes');
+const dashboardRoutes = require('./modules/dashboard/dashboard.routes');
 const swaggerDocument = require('./swagger.json');
 
 const app = express();
@@ -101,6 +102,7 @@ app.use(`${api}/templates`, templatesRoutes);
 app.use(`${api}/certificates`, certificatesRoutes);
 app.use(`${api}/verify`, verificationRoutes);
 app.use(`${api}/audit`, auditRoutes);
+app.use(`${api}/dashboard`, dashboardRoutes);
 
 // Catch 404 & Central Error Handling
 app.use(notFound);

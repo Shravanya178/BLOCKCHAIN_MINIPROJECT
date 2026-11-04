@@ -36,6 +36,11 @@ router.get('/layout-spec', (_req, res) => {
       customFonts: 'Place .ttf/.otf files in backend/assets/fonts and reference them by file name.',
       placeholders: FIELD_NAMES.map((f) => `{{${f}}}`),
       requiredFields: ['studentName', 'certificateId'],
+      participantFieldPolicy: {
+        required: 'Fields that must be present before issuance',
+        optional: 'Fields rendered only when configured and non-empty',
+        hidden: 'Fields never rendered for the selected template',
+      },
       background: 'PNG or JPEG exported from Canva (recommended: PNG, 2x size). Max 10 MB.',
     },
   });
@@ -55,7 +60,7 @@ router.get(
     const t = await service.getTemplateOrThrow(req.params.templateId);
     const buf = await service.loadBackground(t);
     if (!buf) return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Template has no background image' } });
-    res.type(t.backgroundMimeType).send(buf);
+    res.type(t.backgroundMimeType || 'application/octet-stream').send(buf);
   }),
 );
 

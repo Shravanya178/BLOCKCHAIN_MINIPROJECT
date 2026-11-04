@@ -45,6 +45,12 @@ backend/uploads/*
 backend/deployments/hardhat.json
 backend/deployments/localhost.json
 
+# Local demonstration assets and large binary source files
+TEMPLATES/
+VESIT_participants.xlsx
+*.pdf
+*.xlsx
+
 # Test coverage & reports
 coverage/
 **/coverage/

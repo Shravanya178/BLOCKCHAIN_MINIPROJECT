@@ -139,6 +139,10 @@ class ApiClient {
     return res.json();
   }
 
+  async getDashboardStats() {
+    return this.request('/dashboard/stats');
+  }
+
   // --- Events Endpoints ---
   async getEvents(params = {}) {
     const query = new URLSearchParams(params).toString();
@@ -218,6 +222,18 @@ class ApiClient {
   async retryCertificate(id) {
     return this.request(`/certificates/${id}/retry`, {
       method: 'POST',
+    });
+  }
+  async resumeBatch(id) {
+    return this.request(`/certificates/batches/${id}/resume`, {
+      method: 'POST',
+    });
+  }
+
+  async reissueCertificate(id, reason) {
+    return this.request(`/certificates/${id}/reissue`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
     });
   }
 

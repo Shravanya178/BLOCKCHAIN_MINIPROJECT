@@ -66,7 +66,7 @@ class BlockchainService {
   getSigner() {
     if (!this._wallet) {
       const provider = this.getProvider();
-      this._wallet = new ethers.Wallet(config.blockchain.privateKey, provider);
+      this._wallet = new ethers.NonceManager(new ethers.Wallet(config.blockchain.privateKey, provider));
     }
     return this._wallet;
   }
@@ -74,6 +74,11 @@ class BlockchainService {
   getContract(readOnly = false) {
     const address = this.resolveContractAddress();
     if (!address) {
+      if (config.blockchain.network === 'sepolia') {
+        throw AppError.unavailable(
+          'Sepolia contract deployment is not available. Deploy the contract first or set CONTRACT_ADDRESS.',
+        );
+      }
       throw AppError.unavailable('Smart contract address is not configured or deployed yet');
     }
     const abi = this.loadAbi();

@@ -17,20 +17,37 @@ const service = require('./certificates.service');
 
 const router = express.Router();
 
+const optionalText = (max) => z.preprocess((value) => value === '' ? undefined : value, z.string().trim().max(max).optional());
+
 const issueSingleSchema = z.object({
   eventId: z.string().uuid(),
   templateId: z.string().uuid().optional(),
   studentName: z.string().trim().min(2).max(150),
-  studentId: z.string().trim().max(50).optional(),
-  email: z.string().trim().email().max(254).optional(),
-  department: z.string().trim().max(100).optional(),
-  certificateTitle: z.string().trim().max(150).optional(),
-  achievement: z.string().trim().max(150).optional(),
+  studentId: optionalText(50),
+  rollNumber: optionalText(50),
+  email: z.preprocess((value) => value === '' ? undefined : value, z.string().trim().email().max(254).optional()),
+  department: optionalText(100),
+  teamName: optionalText(150),
+  projectTitle: optionalText(200),
+  position: optionalText(100),
+  certificateTitle: optionalText(150),
+  achievement: optionalText(150),
   issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD format required').optional(),
 });
 
 const revokeSchema = z.object({
   reason: z.string().trim().min(3).max(500),
+});
+
+const reissueSchema = z.object({
+  reason: z.string().trim().min(3).max(500),
+  templateId: z.string().uuid().optional(),
+  certificateTitle: optionalText(150),
+  achievement: optionalText(150),
+  teamName: optionalText(150),
+  projectTitle: optionalText(200),
+  position: optionalText(100),
+  issueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD format required').optional(),
 });
 
 const listCertsSchema = paginationSchema.extend({
@@ -240,6 +257,9 @@ router.post(
     if (!Array.isArray(recipients) || recipients.length === 0) {
       throw AppError.badRequest('At least 1 recipient is required');
     }
+    if (idempotencyKey && (typeof idempotencyKey !== 'string' || idempotencyKey.trim().length > 100)) {
+      throw AppError.badRequest('idempotencyKey must be at most 100 characters');
+    }
 
     const result = await service.processBatchIssuance(
       req.user,
@@ -287,6 +307,15 @@ router.get(
   }),
 );
 
+router.post(
+  '/batches/:batchId/resume',
+  asyncHandler(async (req, res) => {
+    if (!isUuid(req.params.batchId)) throw AppError.notFound('Batch not found');
+    const result = await service.resumeBatchIssuance(req.user, req.params.batchId, req.ip);
+    res.json({ success: true, data: result });
+  }),
+);
+
 /**
  * Retry failed registration
  */
@@ -307,6 +336,24 @@ router.post(
   asyncHandler(async (req, res) => {
     const cert = await service.revokeCertificate(req.user, req.params.certificateId, req.body.reason, req.ip);
     res.json({ success: true, data: cert });
+  }),
+);
+
+/**
+ * Issue a new certificate while preserving the original record and chain entry.
+ */
+router.post(
+  '/:certificateId/reissue',
+  validate(reissueSchema),
+  asyncHandler(async (req, res) => {
+    const cert = await service.reissueCertificate(
+      req.user,
+      req.params.certificateId,
+      req.body.reason,
+      req.body,
+      req.ip,
+    );
+    res.status(201).json({ success: true, data: cert });
   }),
 );
 

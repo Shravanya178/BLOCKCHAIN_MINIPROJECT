@@ -270,6 +270,9 @@ model Certificate {
   issuedById        String            @db.Uuid
   recipientName     String
   studentIdentifier String?
+  teamName          String?
+  projectTitle      String?
+  position          String?
   certificateTitle  String
   achievement       String?
   issueDate         DateTime          @db.Date
@@ -290,6 +293,8 @@ model Certificate {
   revocationReason  String?
   revokedById       String?           @db.Uuid
   revocationTxHash  String?
+  previousCertificateId String?        @db.Uuid
+  reissueReason     String?
   lastError         String?
   attempts          Int               @default(0)
   rowNumber         Int?
@@ -302,14 +307,16 @@ model Certificate {
   batch        IssuanceBatch?          @relation(fields: [batchId], references: [id])
   issuedBy     User                    @relation("CertificateIssuedBy", fields: [issuedById], references: [id])
   revokedBy    User?                   @relation("CertificateRevokedBy", fields: [revokedById], references: [id])
+  previousCertificate Certificate?     @relation("CertificateReplacements", fields: [previousCertificateId], references: [id])
+  replacements Certificate[]            @relation("CertificateReplacements")
   transactions BlockchainTransaction[]
 
-  // One certificate per student per event (duplicate-issuance protection).
-  @@unique([eventId, recipientId])
   @@index([status])
   @@index([batchId])
   @@index([eventId])
   @@index([issuedById])
+  @@index([eventId, recipientId])
+  @@index([previousCertificateId])
 }
 
 model BlockchainTransaction {

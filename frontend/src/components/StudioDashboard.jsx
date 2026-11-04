@@ -18,19 +18,21 @@ import {
   Calendar,
   Award,
   User,
-  Building
+  Building,
+  BarChart3
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';
 import { formatAddressOrHash } from '../services/crypto';
 
 export default function StudioDashboard({ user, onRequireLogin, systemStatus }) {
-  const [activeSubTab, setActiveSubTab] = useState('single'); // 'single' | 'bulk' | 'vault' | 'events'
+  const [activeSubTab, setActiveSubTab] = useState('single'); // 'single' | 'bulk' | 'vault' | 'events' | 'dashboard'
   
   // Data states
   const [events, setEvents] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [certificates, setCertificates] = useState([]);
+  const [dashboardStats, setDashboardStats] = useState(null);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   
@@ -38,6 +40,9 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
   const [singleForm, setSingleForm] = useState({
     studentName: 'Arnav Chaudhary',
     studentId: 'CS-2026-002',
+    teamName: '',
+    projectTitle: '',
+    position: '',
     achievement: 'Special Mention',
     certificateTitle: 'Certificate of Excellence',
   });
@@ -121,6 +126,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
       }
 
       loadCertificates();
+      api.getDashboardStats().then((res) => setDashboardStats(res.data)).catch(() => setDashboardStats(null));
     } catch (err) {
       console.warn('Failed to load initial studio data:', err);
     }
@@ -162,6 +168,9 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
         templateId: selectedTemplateId || templates[0]?.id || undefined,
         studentName: singleForm.studentName,
         studentId: singleForm.studentId || undefined,
+        teamName: singleForm.teamName || undefined,
+        projectTitle: singleForm.projectTitle || undefined,
+        position: singleForm.position || undefined,
         achievement: singleForm.achievement || undefined,
         certificateTitle: singleForm.certificateTitle || undefined,
       };
@@ -205,7 +214,10 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
         row: recipient.rowNumber,
         name: recipient.studentName || '',
         id: recipient.studentId || '',
-        achievement: recipient.achievement || 'Participant',
+        teamName: recipient.teamName || '',
+        projectTitle: recipient.projectTitle || '',
+        position: recipient.position || '',
+        achievement: recipient.achievement || '',
         certificateTitle: recipient.certificateTitle || '',
       }))));
       setBulkRowsEdited(false);
@@ -246,6 +258,9 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
           rowNumber: row.row,
           studentName: row.name.trim(),
           studentId: row.id.trim() || null,
+          teamName: row.teamName.trim() || null,
+          projectTitle: row.projectTitle.trim() || null,
+          position: row.position.trim() || null,
           achievement: row.achievement.trim() || null,
           certificateTitle: row.certificateTitle?.trim() || null,
         }))));
@@ -267,7 +282,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
   // Download Sample CSV template
   const downloadSampleCsv = () => {
-    const csvContent = 'student_name,student_id,achievement\n"Arnav Chaudhary","CS-2026-001","First Place Winner"\n"Shravanya Andhale","CS-2026-002","Special Mention"\n"Karuna Jeswani","CS-2026-003","Runner Up"\n"Nikhil Kadam","CS-2026-004","Finalist"';
+    const csvContent = 'student_name,student_id,team_name,project_title,position,achievement\n"Arnav Chaudhary","CS-2026-001","","","","First Place Winner"\n"Shravanya Andhale","CS-2026-002","","","","Special Mention"\n"Karuna Jeswani","CS-2026-003","","","","Runner Up"\n"Nikhil Kadam","CS-2026-004","","","","Finalist"';
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -337,6 +352,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
   });
 
   const selectedEvent = events.find(e => e.id === selectedEventId) || events[0];
+  const statusCounts = dashboardStats?.statusCounts || {};
 
   return (
     <div className="studio-dashboard-section">
@@ -353,6 +369,14 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
 
         {/* Action Tabs Navigation */}
         <div className="studio-subnav">
+          <button 
+            className={`subnav-btn ${activeSubTab === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('dashboard')}
+          >
+            <BarChart3 size={16} />
+            <span>Analytics</span>
+          </button>
+
           <button 
             className={`subnav-btn ${activeSubTab === 'single' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('single')}
@@ -386,6 +410,25 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
           </button>
         </div>
       </div>
+
+      {activeSubTab === 'dashboard' && (
+        <div className="glass-panel dashboard-metrics-grid">
+          <div className="metric-card"><span>Total Events</span><strong>{dashboardStats?.totalEvents ?? '—'}</strong></div>
+          <div className="metric-card"><span>Total Certificates</span><strong>{dashboardStats?.totalCertificates ?? '—'}</strong></div>
+          <div className="metric-card"><span>Confirmed On-Chain</span><strong>{statusCounts.CONFIRMED || 0}</strong></div>
+          <div className="metric-card"><span>Revoked</span><strong>{statusCounts.REVOKED || 0}</strong></div>
+          <div className="metric-card"><span>Failed</span><strong>{statusCounts.FAILED || 0}</strong></div>
+          <div className="metric-card"><span>Pending</span><strong>{(statusCounts.PENDING || 0) + (statusCounts.PDF_GENERATED || 0) + (statusCounts.SUBMITTED_TO_BLOCKCHAIN || 0)}</strong></div>
+          <div className="dashboard-event-list">
+            <h3 className="card-heading"><BarChart3 size={20} /> Event distribution</h3>
+            {(dashboardStats?.eventDistribution || []).map((event) => (
+              <div className="dashboard-event-row" key={event.eventId}>
+                <span>{event.eventName}</span><strong>{event.certificates}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* --- SUB-TAB 1: SINGLE CERTIFICATE FORGE & LIVE CANVA PREVIEW --- */}
       {activeSubTab === 'single' && (
@@ -490,6 +533,36 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     className="input-field" 
                     value={singleForm.achievement}
                     onChange={(e) => setSingleForm({ ...singleForm, achievement: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group flex-1">
+                  <label className="field-label">Team Name (optional)</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={singleForm.teamName}
+                    onChange={(e) => setSingleForm({ ...singleForm, teamName: e.target.value })}
+                  />
+                </div>
+                <div className="form-group flex-1">
+                  <label className="field-label">Project Title (optional)</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={singleForm.projectTitle}
+                    onChange={(e) => setSingleForm({ ...singleForm, projectTitle: e.target.value })}
+                  />
+                </div>
+                <div className="form-group flex-1">
+                  <label className="field-label">Position (optional)</label>
+                  <input
+                    type="text"
+                    className="input-field"
+                    value={singleForm.position}
+                    onChange={(e) => setSingleForm({ ...singleForm, position: e.target.value })}
                   />
                 </div>
               </div>
@@ -661,7 +734,7 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
             />
             <UploadCloud size={36} className="icon-cyan" />
             <h4>{isPreviewingBulk ? 'Validating recipient file...' : (csvFile ? csvFile.name : 'Click to Upload Recipients CSV or XLSX')}</h4>
-            <p>Required column: student_name. Optional: student_id, achievement, certificate_title</p>
+            <p>Required column: student_name. Optional: student_id, team_name, project_title, position, achievement, certificate_title</p>
           </div>
 
           {bulkError && (
@@ -702,6 +775,9 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                       <th>#</th>
                       <th>Student Name</th>
                       <th>Student ID</th>
+                      <th>Team</th>
+                      <th>Project</th>
+                      <th>Position</th>
                       <th>Achievement</th>
                       <th>Status</th>
                     </tr>
@@ -710,6 +786,39 @@ export default function StudioDashboard({ user, onRequireLogin, systemStatus }) 
                     {parsedRows.map((row) => (
                       <tr key={row.row}>
                         <td className="mono">{row.row}</td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.teamName}
+                            aria-label={`Team name for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, teamName: e.target.value } : item));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.projectTitle}
+                            aria-label={`Project title for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, projectTitle: e.target.value } : item));
+                            }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            className="input-field"
+                            value={row.position}
+                            aria-label={`Position for row ${row.row}`}
+                            onChange={(e) => {
+                              setBulkRowsEdited(true);
+                              setParsedRows((rows) => rows.map((item) => item.row === row.row ? { ...item, position: e.target.value } : item));
+                            }}
+                          />
+                        </td>
                         <td>
                           <input
                             className="input-field"

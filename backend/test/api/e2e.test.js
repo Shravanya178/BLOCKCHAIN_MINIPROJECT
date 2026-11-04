@@ -241,4 +241,29 @@ describe('Full End-to-End API Integration', () => {
       expect(verifyRes.body.data.isVerified).toBe(false);
     });
   });
+
+  describe('7. Reissue Workflow', () => {
+    it('creates a new blockchain-registered certificate and preserves the revoked original', async () => {
+      const reissueRes = await request(app)
+        .post(`/api/v1/certificates/${issuedCertId}/reissue`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ reason: 'Corrected certificate after administrative review' });
+
+      expect(reissueRes.status).toBe(201);
+      expect(reissueRes.body.success).toBe(true);
+      expect(reissueRes.body.data.certificateId).not.toBe(issuedCertId);
+      expect(reissueRes.body.data.previousCertificateId).toBeDefined();
+      expect(reissueRes.body.data.reissueReason).toBe('Corrected certificate after administrative review');
+      expect(reissueRes.body.data.status).toBe('CONFIRMED');
+
+      const replacementVerification = await request(app)
+        .get(`/api/v1/verify/${reissueRes.body.data.certificateId}`);
+      expect(replacementVerification.status).toBe(200);
+      expect(replacementVerification.body.data.isVerified).toBe(true);
+
+      const originalVerification = await request(app).get(`/api/v1/verify/${issuedCertId}`);
+      expect(originalVerification.status).toBe(410);
+      expect(originalVerification.body.data.status).toBe('REVOKED');
+    });
+  });
 });

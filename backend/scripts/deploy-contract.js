@@ -9,13 +9,50 @@
 const fs = require('fs');
 const path = require('path');
 const hre = require('hardhat');
+const { ethers } = require('ethers');
+
+function requireAddress(value, variableName) {
+  if (!value || !ethers.isAddress(value)) {
+    throw new Error(`${variableName} must be a valid Ethereum address`);
+  }
+  return value;
+}
+
+async function grantConfiguredIssuerRole(registry, deployer, configuredIssuer, adminRole, issuerRole) {
+  const issuerAddress = requireAddress(configuredIssuer, 'ISSUER_ADDRESS');
+  if (issuerAddress.toLowerCase() === deployer.address.toLowerCase()) {
+    console.log(`Issuer:      ${deployer.address} (deployer already has ISSUER_ROLE)`);
+    return;
+  }
+
+  const alreadyIssuer = await registry.hasRole(issuerRole, issuerAddress);
+  if (alreadyIssuer) {
+    console.log(`Issuer:      ${issuerAddress} (already has ISSUER_ROLE)`);
+    return;
+  }
+
+  const deployerIsAdmin = await registry.hasRole(adminRole, deployer.address);
+  if (!deployerIsAdmin) {
+    throw new Error(
+      `Cannot grant ISSUER_ROLE to ${issuerAddress}: deployer ${deployer.address} ` +
+      'does not hold DEFAULT_ADMIN_ROLE. Grant the role using the configured administrator wallet.',
+    );
+  }
+
+  const tx = await registry.grantRole(issuerRole, issuerAddress);
+  await tx.wait();
+  if (!(await registry.hasRole(issuerRole, issuerAddress))) {
+    throw new Error(`ISSUER_ROLE grant transaction completed but was not observed for ${issuerAddress}`);
+  }
+  console.log(`Granted ISSUER_ROLE to ${issuerAddress}`);
+}
 
 async function main() {
   const { ethers, network } = hre;
   const [deployer] = await ethers.getSigners();
   if (!deployer) throw new Error(`No deployer account configured for network "${network.name}"`);
 
-  const admin = process.env.CONTRACT_ADMIN_ADDRESS || deployer.address;
+  const admin = requireAddress(process.env.CONTRACT_ADMIN_ADDRESS || deployer.address, 'CONTRACT_ADMIN_ADDRESS');
   // The backend signer must hold ISSUER_ROLE. Locally that is the deployer.
   const issuer = deployer.address;
 
@@ -32,11 +69,22 @@ async function main() {
   const receipt = await deployTx.wait(network.name === 'sepolia' ? 2 : 1);
   const address = await registry.getAddress();
 
+  const adminRole = await registry.DEFAULT_ADMIN_ROLE();
+  const issuerRole = await registry.ISSUER_ROLE();
+  if (!(await registry.hasRole(adminRole, admin))) {
+    throw new Error(`Deployment verification failed: ${admin} does not hold DEFAULT_ADMIN_ROLE`);
+  }
+  if (!(await registry.hasRole(issuerRole, issuer))) {
+    throw new Error(`Deployment verification failed: ${issuer} does not hold ISSUER_ROLE`);
+  }
+
   const extraIssuer = process.env.ISSUER_ADDRESS;
-  if (extraIssuer && ethers.isAddress(extraIssuer) && extraIssuer.toLowerCase() !== issuer.toLowerCase()) {
-    const tx = await registry.grantRole(await registry.ISSUER_ROLE(), extraIssuer);
-    await tx.wait();
-    console.log(`Granted ISSUER_ROLE to ${extraIssuer}`);
+  if (extraIssuer) {
+    await grantConfiguredIssuerRole(registry, deployer, extraIssuer, adminRole, issuerRole);
+  } else if (admin.toLowerCase() !== deployer.address.toLowerCase()) {
+    console.log(
+      `Administrator: ${admin} (different from deployer; additional role grants require this administrator)`,
+    );
   }
 
   const info = {
@@ -52,15 +100,25 @@ async function main() {
     deployedAt: new Date().toISOString(),
   };
   const dir = path.resolve(__dirname, '../deployments');
+  const deploymentPath = path.join(dir, `${network.name}.json`);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, `${network.name}.json`), `${JSON.stringify(info, null, 2)}\n`);
+  fs.writeFileSync(deploymentPath, `${JSON.stringify(info, null, 2)}\n`);
 
-  console.log(`CertificateRegistry deployed at ${address} (block ${receipt.blockNumber})`);
-  console.log(`Saved deployments/${network.name}.json`);
+  console.log(`Contract:    ${address}`);
+  console.log(`Network:     ${network.name}`);
+  console.log(`Chain ID:    ${info.chainId}`);
+  console.log(`Deployer:    ${deployer.address}`);
+  console.log(`Administrator: ${admin}`);
+  console.log(`Issuer:      ${issuer}`);
+  console.log(`Saved:       ${deploymentPath}`);
   if (network.name === 'sepolia') console.log(`Etherscan: https://sepolia.etherscan.io/address/${address}`);
 }
 
-main().catch((err) => {
-  console.error(err.message || err);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err.message || err);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { grantConfiguredIssuerRole, requireAddress };

@@ -1,6 +1,7 @@
 const prisma = require('../src/config/prisma');
 const { hashPassword } = require('../src/modules/auth/auth.service');
 const defaultTemplates = require('../src/modules/templates/defaultTemplates');
+const assetTemplates = require('../src/modules/templates/assetTemplates');
 const logger = require('../src/utils/logger');
 require('dotenv').config();
 
@@ -54,9 +55,9 @@ async function seed() {
     console.log(`Teacher user already exists: ${teacherEmail}`);
   }
 
-  // 3. Seed Default Canva-compatible Starter Templates
+  // 3. Seed default templates and the supplied certificate PDF designs.
   let defaultTemplateId = null;
-  for (const t of defaultTemplates) {
+  for (const t of [...defaultTemplates, ...assetTemplates]) {
     const existing = await prisma.certificateTemplate.findUnique({ where: { key: t.key } });
     if (!existing) {
       const created = await prisma.certificateTemplate.create({
@@ -67,6 +68,8 @@ async function seed() {
           category: t.category,
           orientation: 'landscape',
           layout: t.layout,
+          backgroundKey: t.backgroundKey,
+          backgroundMimeType: t.backgroundMimeType,
           isActive: true,
           version: 1,
           createdById: admin.id,
@@ -75,6 +78,17 @@ async function seed() {
       console.log(`Created template: ${t.key}`);
       if (!defaultTemplateId) defaultTemplateId = created.id;
     } else {
+      if (t.key.startsWith('asset-') && JSON.stringify(existing.layout) !== JSON.stringify(t.layout)) {
+        await prisma.certificateTemplate.update({
+          where: { id: existing.id },
+          data: {
+            layout: t.layout,
+            backgroundKey: t.backgroundKey,
+            backgroundMimeType: t.backgroundMimeType,
+            version: existing.version + 1,
+          },
+        });
+      }
       if (!defaultTemplateId) defaultTemplateId = existing.id;
     }
   }

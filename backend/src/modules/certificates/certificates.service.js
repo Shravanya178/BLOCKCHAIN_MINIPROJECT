@@ -14,6 +14,16 @@ const { generateUniqueCertificateId } = require('../../utils/certificateId');
 const { toPrisma, meta } = require('../../utils/pagination');
 const { isUuid } = require('../../validators/common');
 const audit = require('../audit/audit.service');
+const { validateParticipantFields } = require('./field-policy');
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function retryDelay(attempts) {
+  return Math.min(
+    config.limits.retryMaxDelayMs,
+    config.limits.retryBaseDelayMs * (2 ** Math.max(0, attempts - 1)),
+  );
+}
 
 function resolveValidityDate(event, issueDate) {
   if (event.validityPolicy === 'PERMANENT') return null;
@@ -65,7 +75,7 @@ async function resolveRecipient({ fullName, studentIdentifier, email, department
 /**
  * Pipeline to generate certificate PDF, compute its SHA-256 hash, and store PDF.
  */
-async function generateAndStorePdf({ certificate, event, template, issuerUser }) {
+async function generateAndStorePdf({ certificate, event, template, issuerUser, department }) {
   const templateBackground = await templatesService.loadBackground(template);
 
   const verificationUrl = buildVerificationUrl(certificate.certificateId);
@@ -77,6 +87,9 @@ async function generateAndStorePdf({ certificate, event, template, issuerUser })
       certificateId: certificate.certificateId,
       studentName: certificate.recipientName,
       studentId: certificate.studentIdentifier,
+      teamName: certificate.teamName,
+      projectTitle: certificate.projectTitle,
+      position: certificate.position,
       eventName: event.name,
       eventDate: event.eventDate,
       issueDate: certificate.issueDate,
@@ -86,8 +99,11 @@ async function generateAndStorePdf({ certificate, event, template, issuerUser })
       institutionName: event.institutionName,
       issuerName: issuerUser.name,
       signatoryName: event.signatoryName,
+      signatoryDesignation: event.signatoryTitle,
       signatoryTitle: event.signatoryTitle,
       venue: event.venue,
+      department,
+      certificateType: event.certificateType,
     },
     verificationUrl,
   });
@@ -108,7 +124,7 @@ async function generateAndStorePdf({ certificate, event, template, issuerUser })
 /**
  * Issues a single certificate.
  */
-async function issueSingleCertificate(actorUser, payload, ip) {
+async function issueSingleCertificate(actorUser, payload, ip, replacement = null) {
   const event = await prisma.event.findUnique({
     where: { id: payload.eventId },
     include: { issuer: true },
@@ -125,30 +141,32 @@ async function issueSingleCertificate(actorUser, payload, ip) {
     throw AppError.badRequest('No template selected and event has no default template');
   }
   const template = await templatesService.getUsableTemplate(templateId);
+  const participant = validateParticipantFields(payload, event, template.layout);
 
   // Recipient
   const recipient = await resolveRecipient({
-    fullName: payload.studentName,
-    studentIdentifier: payload.studentId,
-    email: payload.email,
-    department: payload.department,
+    fullName: participant.studentName,
+    studentIdentifier: participant.studentId,
+    email: participant.email,
+    department: participant.department,
   });
 
   // Duplicate check
-  const existingCert = await prisma.certificate.findUnique({
-    where: {
-      eventId_recipientId: {
+  if (!replacement) {
+    const existingCert = await prisma.certificate.findFirst({
+      where: {
         eventId: event.id,
         recipientId: recipient.id,
       },
-    },
-  });
-
-  if (existingCert) {
-    throw AppError.conflict('Certificate already issued for this student in this event', {
-      certificateId: existingCert.certificateId,
-      status: existingCert.status,
+      orderBy: { createdAt: 'desc' },
     });
+
+    if (existingCert) {
+      throw AppError.conflict('Certificate already issued for this student in this event', {
+        certificateId: existingCert.certificateId,
+        status: existingCert.status,
+      });
+    }
   }
 
   const certificateId = await generateUniqueCertificateId();
@@ -163,14 +181,19 @@ async function issueSingleCertificate(actorUser, payload, ip) {
       recipientId: recipient.id,
       templateId: template.id,
       issuedById: actorUser.id,
-      recipientName: payload.studentName,
-      studentIdentifier: payload.studentId || null,
-      certificateTitle: payload.certificateTitle || template.name,
-      achievement: payload.achievement || null,
+      recipientName: participant.studentName,
+      studentIdentifier: participant.studentId,
+      teamName: participant.teamName,
+      projectTitle: participant.projectTitle,
+      position: participant.position,
+      certificateTitle: participant.certificateTitle || template.name,
+      achievement: participant.achievement,
       issueDate,
       validUntil,
       status: 'PENDING',
       verificationUrl: buildVerificationUrl(certificateId),
+      previousCertificateId: replacement?.id || null,
+      reissueReason: replacement?.reason || null,
     },
   });
 
@@ -181,6 +204,7 @@ async function issueSingleCertificate(actorUser, payload, ip) {
       event,
       template,
       issuerUser: event.issuer,
+      department: recipient.department,
     });
 
     cert = await prisma.certificate.update({
@@ -212,11 +236,32 @@ async function issueSingleCertificate(actorUser, payload, ip) {
       },
     });
 
-    const chainResult = await blockchainService.registerCertificateOnChain(
-      cert.certificateId,
-      cert.documentHash,
-      cert.validUntil ? Math.floor(cert.validUntil.getTime() / 1000) : 0,
-    );
+    let chainResult;
+    try {
+      chainResult = await blockchainService.registerCertificateOnChain(
+        cert.certificateId,
+        cert.documentHash,
+        cert.validUntil ? Math.floor(cert.validUntil.getTime() / 1000) : 0,
+      );
+    } catch (err) {
+      await prisma.certificate.update({
+        where: { id: cert.id },
+        data: { status: 'FAILED', lastError: err.message },
+      });
+      await prisma.blockchainTransaction.update({
+        where: { id: txRecord.id },
+        data: { status: 'FAILED', errorMessage: err.message },
+      });
+      await audit.record({
+        actorId: actorUser.id,
+        action: 'CERTIFICATE_ISSUANCE_FAILED',
+        entityType: 'Certificate',
+        entityId: cert.id,
+        metadata: { certificateId: cert.certificateId, error: err.message },
+        ip,
+      });
+      throw err;
+    }
 
     // 3. Mark Confirmed
     cert = await prisma.certificate.update({
@@ -265,6 +310,45 @@ async function issueSingleCertificate(actorUser, payload, ip) {
     });
     throw err;
   }
+
+}
+
+/**
+ * Issues a replacement certificate without changing the original record.
+ */
+async function reissueCertificate(actorUser, certificateId, reason, payload, ip) {
+  const original = await prisma.certificate.findUnique({
+    where: { certificateId },
+    include: { event: true, recipient: true },
+  });
+  if (!original) throw AppError.notFound('Certificate not found');
+
+  const isAdmin = actorUser.role === 'ADMIN';
+  const isOwner = original.event.createdById === actorUser.id || original.event.issuerId === actorUser.id;
+  if (!isAdmin && !(actorUser.role === 'TEACHER' && isOwner)) {
+    throw AppError.forbidden('You are not authorized to reissue this certificate');
+  }
+  if (!['CONFIRMED', 'REVOKED'].includes(original.status)) {
+    throw AppError.badRequest('Only a confirmed or revoked certificate can be reissued');
+  }
+
+  return issueSingleCertificate(
+    actorUser,
+    {
+      eventId: original.eventId,
+      templateId: payload.templateId || original.templateId,
+      studentName: original.recipientName,
+      studentId: original.studentIdentifier || undefined,
+      teamName: payload.teamName ?? original.teamName,
+      projectTitle: payload.projectTitle ?? original.projectTitle,
+      position: payload.position ?? original.position,
+      certificateTitle: payload.certificateTitle || original.certificateTitle,
+      achievement: payload.achievement ?? original.achievement ?? undefined,
+      issueDate: payload.issueDate,
+    },
+    ip,
+    { id: original.id, reason },
+  );
 }
 
 /**
@@ -273,7 +357,7 @@ async function issueSingleCertificate(actorUser, payload, ip) {
 async function retryCertificateRegistration(actorUser, certificateId, ip) {
   const cert = await prisma.certificate.findUnique({
     where: { certificateId },
-    include: { event: { include: { issuer: true } }, template: true },
+    include: { event: { include: { issuer: true } }, template: true, recipient: true },
   });
   if (!cert) throw AppError.notFound('Certificate not found');
 
@@ -288,6 +372,8 @@ async function retryCertificateRegistration(actorUser, certificateId, ip) {
     throw AppError.badRequest('Cannot retry a revoked certificate');
   }
 
+  await sleep(retryDelay(cert.attempts));
+
   // If PDF was never generated, generate it first
   if (!cert.documentHash || !cert.storageKey) {
     const pdfResult = await generateAndStorePdf({
@@ -295,6 +381,7 @@ async function retryCertificateRegistration(actorUser, certificateId, ip) {
       event: cert.event,
       template: cert.template,
       issuerUser: cert.event.issuer,
+      department: cert.recipient?.department,
     });
     await prisma.certificate.update({
       where: { id: cert.id },
@@ -326,10 +413,32 @@ async function retryCertificateRegistration(actorUser, certificateId, ip) {
     },
   });
 
-  const chainResult = await blockchainService.registerCertificateOnChain(
-    cert.certificateId,
-    cert.documentHash,
-  );
+  let chainResult;
+  try {
+    chainResult = await blockchainService.registerCertificateOnChain(
+      cert.certificateId,
+      cert.documentHash,
+      cert.validUntil ? Math.floor(cert.validUntil.getTime() / 1000) : 0,
+    );
+  } catch (err) {
+    await prisma.certificate.update({
+      where: { id: cert.id },
+      data: { status: 'FAILED', lastError: err.message },
+    });
+    await prisma.blockchainTransaction.update({
+      where: { id: txRecord.id },
+      data: { status: 'FAILED', errorMessage: err.message },
+    });
+    await audit.record({
+      actorId: actorUser.id,
+      action: 'CERTIFICATE_RETRY_FAILED',
+      entityType: 'Certificate',
+      entityId: cert.id,
+      metadata: { certificateId: cert.certificateId, error: err.message },
+      ip,
+    });
+    throw err;
+  }
 
   const updated = await prisma.certificate.update({
     where: { id: cert.id },
@@ -366,6 +475,75 @@ async function retryCertificateRegistration(actorUser, certificateId, ip) {
   });
 
   return updated;
+}
+
+/**
+ * Resumes failed certificate registrations belonging to a batch.
+ * Successfully confirmed certificates are left untouched and failed rows remain
+ * visible in the batch error list for subsequent retries.
+ */
+async function resumeBatchIssuance(actorUser, batchId, ip) {
+  const batch = await prisma.issuanceBatch.findUnique({
+    where: { id: batchId },
+    include: { event: true, certificates: true },
+  });
+  if (!batch) throw AppError.notFound('Batch not found');
+  if (actorUser.role !== 'ADMIN' && batch.createdById !== actorUser.id) {
+    throw AppError.forbidden('Not authorized to resume this batch');
+  }
+  if (batch.status === 'PROCESSING') {
+    throw AppError.conflict('Batch is already being processed');
+  }
+
+  const retryable = batch.certificates.filter((certificate) =>
+    ['FAILED', 'PDF_GENERATED', 'SUBMITTED_TO_BLOCKCHAIN'].includes(certificate.status),
+  );
+  const existingErrors = Array.isArray(batch.rowErrors) ? batch.rowErrors : [];
+  const retryErrors = [];
+  for (const certificate of retryable) {
+    try {
+      await retryCertificateRegistration(actorUser, certificate.certificateId, ip);
+    } catch (err) {
+      retryErrors.push({
+        certificateId: certificate.certificateId,
+        studentName: certificate.recipientName,
+        error: err.message,
+      });
+    }
+  }
+
+  const refreshed = await prisma.issuanceBatch.findUnique({
+    where: { id: batch.id },
+    include: { certificates: true },
+  });
+  const confirmed = refreshed.certificates.filter((certificate) => certificate.status === 'CONFIRMED').length;
+  const rejected = Math.max(0, refreshed.totalRows - confirmed);
+  const status = confirmed === refreshed.totalRows ? 'COMPLETED' : confirmed > 0 ? 'PARTIALLY_FAILED' : 'FAILED';
+  const updated = await prisma.issuanceBatch.update({
+    where: { id: batch.id },
+    data: {
+      acceptedRows: confirmed,
+      rejectedRows: Math.max(0, rejected),
+      rowErrors: [...existingErrors, ...retryErrors],
+      status,
+      completedAt: new Date(),
+    },
+    include: {
+      event: { select: { id: true, name: true } },
+      template: { select: { id: true, name: true } },
+      certificates: true,
+    },
+  });
+
+  await audit.record({
+    actorId: actorUser.id,
+    action: 'BATCH_ISSUANCE_RESUMED',
+    entityType: 'IssuanceBatch',
+    entityId: batch.id,
+    metadata: { retried: retryable.length, confirmed, failed: retryErrors.length },
+    ip,
+  });
+  return { batch: updated, certificates: updated.certificates, errors: retryErrors };
 }
 
 /**
@@ -447,6 +625,28 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
     throw AppError.forbidden('Not authorized to issue certificates for this event');
   }
 
+  if (idempotencyKey) {
+    const existingBatch = await prisma.issuanceBatch.findUnique({
+      where: { idempotencyKey: idempotencyKey.trim() },
+      include: {
+        event: { select: { id: true, name: true } },
+        template: { select: { id: true, name: true } },
+        certificates: true,
+      },
+    });
+    if (existingBatch) {
+      if (existingBatch.createdById !== actorUser.id && actorUser.role !== 'ADMIN') {
+        throw AppError.forbidden('This idempotency key belongs to another organizer');
+      }
+      return {
+        batch: existingBatch,
+        certificates: existingBatch.certificates.filter((certificate) => certificate.status === 'CONFIRMED'),
+        errors: existingBatch.rowErrors,
+        idempotentReplay: true,
+      };
+    }
+  }
+
   const resolvedTemplateId = templateId || event.defaultTemplateId;
   if (!resolvedTemplateId) {
     throw AppError.badRequest('No template specified and event has no default template');
@@ -462,7 +662,7 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
       source: originalFilename
         ? (originalFilename.toLowerCase().endsWith('.xlsx') ? 'XLSX' : 'CSV')
         : 'SINGLE',
-      idempotencyKey: idempotencyKey || null,
+      idempotencyKey: idempotencyKey ? idempotencyKey.trim() : null,
       originalFilename: originalFilename || null,
       totalRows: recipients.length,
       acceptedRows: 0,
@@ -475,26 +675,27 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
   const rowErrors = [];
   const successfulCertificates = [];
 
-  for (const item of recipients) {
-    const rowNum = item.rowNumber || null;
-    try {
-      if (!item.studentName || item.studentName.trim().length === 0) {
-        throw new Error('Student name is required');
-      }
+  for (let offset = 0; offset < recipients.length; offset += config.limits.batchChunkSize) {
+    const chunk = recipients.slice(offset, offset + config.limits.batchChunkSize);
+    for (const item of chunk) {
+      const rowNum = item.rowNumber || null;
+      try {
+      const participant = validateParticipantFields(item, event, template.layout);
 
       const recipient = await resolveRecipient({
-        fullName: item.studentName,
-        studentIdentifier: item.studentId,
+        fullName: participant.studentName,
+        studentIdentifier: participant.studentId,
+        email: participant.email,
+        department: participant.department,
       });
 
       // Check duplicate
-      const duplicate = await prisma.certificate.findUnique({
+      const duplicate = await prisma.certificate.findFirst({
         where: {
-          eventId_recipientId: {
-            eventId: event.id,
-            recipientId: recipient.id,
-          },
+          eventId: event.id,
+          recipientId: recipient.id,
         },
+        orderBy: { createdAt: 'desc' },
       });
       if (duplicate) {
         throw new Error(`Already issued certificate (${duplicate.certificateId}) for this student in this event`);
@@ -512,10 +713,13 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
           templateId: template.id,
           batchId: batch.id,
           issuedById: actorUser.id,
-          recipientName: item.studentName,
-          studentIdentifier: item.studentId || null,
-          certificateTitle: item.certificateTitle || template.name,
-          achievement: item.achievement || null,
+          recipientName: participant.studentName,
+          studentIdentifier: participant.studentId,
+          teamName: participant.teamName,
+          projectTitle: participant.projectTitle,
+          position: participant.position,
+          certificateTitle: participant.certificateTitle || template.name,
+          achievement: participant.achievement,
           issueDate,
           validUntil,
           status: 'PENDING',
@@ -530,6 +734,7 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
         event,
         template,
         issuerUser: event.issuer,
+        department: recipient.department,
       });
 
       cert = await prisma.certificate.update({
@@ -580,13 +785,14 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
       });
 
       successfulCertificates.push(cert);
-    } catch (err) {
-      rowErrors.push({
-        rowNumber: rowNum,
-        studentName: item.studentName,
-        studentId: item.studentId,
-        error: err.message,
-      });
+      } catch (err) {
+        rowErrors.push({
+          rowNumber: rowNum,
+          studentName: item.studentName,
+          studentId: item.studentId,
+          error: err.message,
+        });
+      }
     }
   }
 
@@ -634,7 +840,9 @@ async function processBatchIssuance(actorUser, { eventId, templateId, recipients
 
 module.exports = {
   issueSingleCertificate,
+  reissueCertificate,
   retryCertificateRegistration,
+  resumeBatchIssuance,
   revokeCertificate,
   processBatchIssuance,
   resolveRecipient,

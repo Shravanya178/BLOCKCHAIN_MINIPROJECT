@@ -15,7 +15,12 @@ function normalizeRecord(record, rowNumber) {
     rowNumber,
     studentName: normalized.student_name || normalized.name || normalized.student || normalized.recipient_name,
     studentId: normalized.student_id || normalized.id || normalized.roll_no || normalized.prn || null,
-    achievement: normalized.achievement || normalized.rank || normalized.position || normalized.grade || null,
+    teamName: normalized.team_name || normalized.team || null,
+    projectTitle: normalized.project_title || normalized.project || null,
+    position: normalized.position || normalized.rank || null,
+    achievement: normalized.achievement || normalized.grade || normalized.rank || normalized.position || null,
+    department: normalized.department || null,
+    email: normalized.email || null,
     certificateTitle: normalized.certificate_title || normalized.title || null,
     issueDate: normalized.issue_date || normalized.date || null,
     raw: record,
@@ -27,7 +32,7 @@ function normalizeRecord(record, rowNumber) {
  * Expected columns (case-insensitive, underscores or spaces allowed):
  * - student_name / name / student (required)
  * - student_id / id / roll_no (optional)
- * - achievement / rank / position (optional)
+ * - achievement / position / team_name / project_title / department / email (optional)
  * - certificate_title (optional)
  * - date / issue_date (optional, YYYY-MM-DD)
  */

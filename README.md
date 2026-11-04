@@ -1,282 +1,144 @@
-# Blockchain-Based Academic & Event Certificate Generation and Verification System
+# CertiChain
 
-[![CI - Smart Contracts & Backend Build](https://github.com/Shravanya178/BLOCKCHAIN_MINIPROJECT/actions/workflows/ci.yml/badge.svg)](https://github.com/Shravanya178/BLOCKCHAIN_MINIPROJECT/actions/workflows/ci.yml)
+Blockchain-based college event certificate issuance and verification for VES Institute of Technology (VESIT).
 
-A secure, tamper-proof backend and blockchain integration system for issuing, personalizing, and publicly verifying college event certificates using **Solidity smart contracts**, **Node.js/Express**, and **PostgreSQL (Neon)**.
+CertiChain lets an authorized organizer create an event, choose a certificate design, upload participant data, issue personalized certificates, store the final PDF on IPFS, and register only its cryptographic proof on Ethereum. Anyone can verify a certificate by ID or by uploading the PDF, without logging in or connecting MetaMask.
 
----
+## What the system does
 
-## 👥 Project Team
-- **02 - Shravanya Andhale**
-- **06 - Arnav Chaudhary**
-- **11 - Karuna Jeswani**
-- **12 - Nikhil Kadam**
+- Admin and teacher authentication with role-based access.
+- Event creation with event category, certificate type, validity and signatory details.
+- Versioned certificate templates, including the 28 supplied PDF designs when the local `TEMPLATES/` assets are present.
+- CSV/XLSX participant parsing with preview, duplicate detection and optional fields.
+- Single and bulk certificate issuance.
+- Conditional participant fields such as roll number, team, project and position.
+- QR codes linking to public verification.
+- PDF rendering and SHA-256 hashing of the finalized bytes.
+- Local filesystem or Pinata IPFS storage.
+- Ethereum registration, expiry and revocation through `CertificateRegistry`.
+- Public ID verification and PDF hash verification.
+- Issuance batches, audit logs, dashboard statistics and certificate reissue history.
 
----
+## Architecture
 
-## 🏗️ Architecture & How It Works
-
-```mermaid
-flowchart TD
-    subgraph Authority Workflow
-        A[Admin / Teacher Logs in] --> B[Create Event & Select Template]
-        B --> C[Enter Student or Upload CSV]
-        C --> D[Backend Renders PDF with QR Code]
-        D --> E[Compute SHA-256 Hash of PDF Bytes]
-        E --> F[Submit Registration Tx to Smart Contract]
-        F --> G[Store PDF & Confirmed Tx Details]
-    end
-
-    subgraph Public Verification
-        H[Scan QR Code or Enter Cert ID] --> I[GET /api/v1/verify/:id]
-        I --> J[Query Smart Contract on Blockchain]
-        J --> K[Return VERIFIED / NOT_FOUND / REVOKED]
-        L[Upload Certificate PDF File] --> M[POST /api/v1/verify/document]
-        M --> N[Compute File Hash & Compare to Blockchain]
-        N --> O[Detect Any PDF Tampering / Alteration]
-    end
+```text
+React + Vite frontend
+        |
+        v
+Express REST API
+  |       |       |
+  |       |       +--> PostgreSQL via Prisma
+  |       +----------> PDF/QR renderer -> local storage or Pinata IPFS
+  +------------------> ethers.js -> CertificateRegistry on Hardhat/Sepolia
 ```
 
-### Key Principles:
-1. **Canva Template Integration**: Certificate designs are created in Canva and exported as PNG/JPEG. The backend overlays personalized text and the QR code using fractional page coordinates.
-2. **Cryptographic Integrity**: The SHA-256 hash is calculated from the *exact finalized PDF file bytes* after rendering.
-3. **No Personal Data on Blockchain**: Only the `certificateId`, document `hash (bytes32)`, `issuer`, and `timestamps` are stored on the blockchain. Student identifiers, names, and contact details remain strictly in the secure PostgreSQL database.
-4. **Authoritative Blockchain Truth**: A certificate is never marked as verified unless confirmed by the smart contract.
+The database stores participant and operational data. The smart contract stores the certificate ID, final PDF SHA-256 hash, issuer and lifecycle timestamps. Personal student data is not written on-chain.
 
-## ✅ Feature-Completion Matrix
+## Blockchain flow
 
-The product requirements and milestone plan are maintained in
-[docs/PROJECT_REQUIREMENTS.md](docs/PROJECT_REQUIREMENTS.md). Visual template
-assets are intentionally pending until supplied.
+1. The backend renders the final PDF.
+2. The exact PDF bytes are hashed with SHA-256.
+3. The PDF is saved locally or pinned to Pinata.
+4. The backend signer submits the certificate ID and hash to `CertificateRegistry`.
+5. Public verification reads PostgreSQL and the deployed contract, then compares the stored hash.
 
-This matrix is based on the implementation currently present on `main` and the
-validation commands listed in the testing section. "Implemented but not
-tested" means the code path exists, but its required external configuration or
-integration test has not completed successfully yet.
+The contract uses OpenZeppelin `AccessControl`:
 
-| Area | Status | Evidence / gap |
-|---|---|---|
-| Solidity certificate registration | Implemented and verified | Hardhat suite passes 16 tests, including duplicate IDs, issuer authorization, expiry, and invalid constructor addresses. |
-| Blockchain revocation | Implemented and verified | Contract tests cover original issuer, admin, unauthorized callers, and repeat revocation. |
-| Certificate expiry | Implemented but not tested end-to-end | The contract supports optional future expiry timestamps and expiry-aware verification; the existing issuance API does not yet expose an expiry policy field. |
-| Authentication and roles | Implemented but not tested | JWT, password hashing, admin/teacher roles, and protected routes exist; API tests require configured database and environment variables. |
-| Event management | Implemented but not tested | Create, list, update, and archive routes exist; event category is not yet a first-class field. |
-| Template management | Partially implemented | Versioned layout JSON, background uploads, preview, and starter templates exist; the required 12-category catalogue and three named initial designs are not complete. |
-| CSV/XLSX participant upload | Implemented but not fully tested | CSV and XLSX parsing, backend-normalized preview, editable participant fields, invalid-row removal, duplicate row detection, and batch records exist; end-to-end browser testing remains pending. |
-| Bulk certificate generation | Implemented but not tested | Batch issuance, idempotency, row-level status, PDF generation, and per-certificate tracking exist; the complete configured 10–15 record flow needs integration validation. |
-| PDF and QR generation | Implemented but not tested | PDFKit rendering, QR verification URLs, and final-document hashing services exist. |
-| SHA-256 integrity verification | Implemented but not tested | Hashes are calculated from PDF bytes and compared with the blockchain record; API integration is blocked by environment setup. |
-| IPFS storage | Implemented but not tested | Pinata service and storage driver exist; Pinata credentials and a privacy decision are still required. |
-| Public ID verification | Implemented but not tested | Public ID and document verification routes exist without authentication. |
-| Public verification UI | Partially implemented | React verification hub and upload flow exist; final browser build is currently blocked by missing native Vite/Oxlint optional bindings. |
-| Dashboard and issuance tracking | Partially implemented | Studio dashboard, ledger, batch statuses, and audit APIs exist; analytics and required filters are incomplete. |
-| Reissue and replacement lifecycle | Not implemented | Existing records are not overwritten, but no explicit reissue relationship or workflow exists. |
-| Sepolia wallet workflow | Partially implemented | Frontend wallet connection and network switching exist; Sepolia deployment and end-to-end MetaMask transaction validation remain. |
-| Automated backend integration tests | Blocked by configuration | The local chain and contract deployment are validated; the test still requires a configured PostgreSQL database, seeded accounts, and backend `.env`. |
-| Frontend lint/build validation | Blocked by environment | Node.js `20.18.1` is below the toolchain's declared `20.19+` requirement and npm skipped native optional bindings. |
+- `DEFAULT_ADMIN_ROLE` manages roles and administrative revocation.
+- `ISSUER_ROLE` registers certificates.
+- `DEPLOYER_PRIVATE_KEY` is deployment-only.
+- `BLOCKCHAIN_PRIVATE_KEY` is the backend runtime signer and must have `ISSUER_ROLE`.
 
-### Dependency-Based Implementation Order
+## Technology
 
-1. Make local development reproducible: document safe test environment setup,
-   add a local-chain/API test bootstrap, and validate frontend tooling on a
-   supported Node version.
-2. Complete the domain model: event categories, certificate types, validity
-   policy, template catalogue, immutable issuance snapshots, and reissue
-   relationships.
-3. Complete participant ingestion: XLSX support, column mapping, event-specific
-   validation, and correction/removal workflow.
-4. Add certificate expiry and lifecycle rules to the contract, backend, and
-   verification responses.
-5. Validate the end-to-end local demo with 10–15 certificates before enabling
-   Pinata and Sepolia demonstration configuration.
+| Layer | Technology |
+|---|---|
+| Frontend | React 19, Vite, ethers.js, Lucide |
+| Backend | Node.js 20+, Express |
+| Database | PostgreSQL, Prisma ORM |
+| Smart contract | Solidity 0.8.24, OpenZeppelin AccessControl |
+| Blockchain tooling | Hardhat, ethers.js v6 |
+| Documents | PDFKit, pdf-lib, QRCode |
+| Storage | Local filesystem or Pinata IPFS |
+| Validation | Zod |
+| Testing | Jest, Supertest, Hardhat |
 
----
+## Repository layout
 
-## 💻 Tech Stack
+```text
+backend/
+  contracts/              Solidity contracts
+  prisma/                 Schema and seed
+  scripts/                Deployment and ABI scripts
+  src/                    Express API and services
+  test/                   API and contract tests
+frontend/
+  src/                    React application
+docs/
+  SETUP_AND_RUN.md        Full setup and demonstration guide
+TEMPLATES/                Local supplied PDF assets (not committed)
+```
 
-- **Backend:** Node.js (v20+) & Express.js
-- **Database & ORM:** PostgreSQL (Neon Serverless) & Prisma ORM
-- **Smart Contract:** Solidity `0.8.24` (OpenZeppelin AccessControl)
-- **Blockchain Framework:** Hardhat & `ethers.js` v6
-- **Networks:** Local Hardhat Node (`localhost:8545`) & Ethereum Sepolia Testnet
-- **PDF Generation:** PDFKit
-- **QR Codes:** `qrcode` (points directly to public verification URL)
-- **Authentication:** JWT Access Tokens & Rotating Refresh Tokens, `bcryptjs`
-- **Validation:** Zod schemas
-- **API Docs:** Interactive Swagger UI at `/api/docs`
+## Quick start
 
----
+Use the detailed [setup and run guide](docs/SETUP_AND_RUN.md). The short version is:
 
-## 🚀 Setup & Execution Guide (Windows PowerShell)
-
-### 1. Prerequisites
-- [Node.js v20+](https://nodejs.org/) installed (`node -v`)
-- [Git](https://git-scm.com/) installed
-- PostgreSQL connection string (configured in `.env`)
-
-### 2. Clone and Install Dependencies
 ```powershell
-git clone https://github.com/Shravanya178/BLOCKCHAIN_MINIPROJECT.git
-cd BLOCKCHAIN_MINIPROJECT/backend
+cd backend
+Copy-Item .env.example .env
 npm install
-```
-
-### 3. Environment Configuration
-Create `backend/.env` (use `backend/.env.example` as a template):
-```powershell
-cp .env.example .env
-```
-Ensure `DATABASE_URL` and `DIRECT_URL` point to your PostgreSQL instance.
-
-### 4. Database Migration & Seeding
-```powershell
-npx prisma db push
-node prisma/seed.js
-```
-The seed script creates:
-- **Default Admin Account:** `admin@college.edu` | `Admin@12345`
-- **Default Teacher Account:** `teacher@college.edu` | `Teacher@12345`
-- **4 Starter Templates:** Participation, Achievement, Workshop, and Technical
-- **Demo College Event:** *HackVenture 2026 - Annual Hackathon*
-
-### 5. Start the Local Blockchain Node
-Open **Terminal 1**:
-```powershell
-cd backend
-npm run chain
-```
-*Leaves a local Ethereum JSON-RPC node running at `http://127.0.0.1:8545`.*
-
-### 6. Deploy the Smart Contract
-Open **Terminal 2**:
-```powershell
-cd backend
-npm run deploy:local
-```
-*Compiles `CertificateRegistry.sol`, deploys it, and saves deployment info to `deployments/localhost.json`.*
-
-### 7. Start the Backend API Server
-In **Terminal 2**:
-```powershell
+npx prisma generate
+npm run db:migrate
+npm run db:seed
 npm start
 ```
-- **API Base:** `http://localhost:4000/api/v1`
-- **Interactive Swagger Docs:** `http://localhost:4000/api/docs`
-- **Health Check:** `http://localhost:4000/health`
-- **Readiness Check:** `http://localhost:4000/ready`
 
-### 8. Run the configured integration workflow
+In another terminal:
 
-After PostgreSQL is configured, the database is migrated and seeded, the local
-chain is running, and `deployments/localhost.json` exists:
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000`. Backend health is available at `http://localhost:4000/health`, readiness at `/ready`, and Swagger at `/api/docs`.
+
+## Network modes
+
+### Local development
+
+Use `BLOCKCHAIN_NETWORK=localhost`, `CHAIN_ID=31337`, `BLOCKCHAIN_RPC_URL=http://127.0.0.1:8545`, `STORAGE_DRIVER=local`, and a local Hardhat deployment.
+
+### Sepolia demonstration
+
+Use `BLOCKCHAIN_NETWORK=sepolia`, `CHAIN_ID=11155111`, a valid authenticated `SEPOLIA_RPC_URL`, a funded deployment wallet, a funded backend issuer wallet, a deployed `CONTRACT_ADDRESS`, and `STORAGE_DRIVER=pinata`. Never commit `.env`, private keys, JWTs or database URLs.
+
+## Security and data handling
+
+- Secrets belong only in ignored `.env` files.
+- Never use a real private key in source code or documentation.
+- Never put student names, email addresses or roll numbers on-chain.
+- Use synthetic data for demonstrations.
+- Do not run `prisma db reset` against a shared or production database.
+- Review every external transaction before submitting it.
+
+## Validation
 
 ```powershell
 cd backend
-npm run test:api -- --runInBand test/api/e2e.test.js
-```
-
-This workflow creates temporary event and certificate records, verifies PDF
-hashes, exercises bulk issuance, and tests revocation. It does not reset the
-database. Without PostgreSQL and `backend/.env`, it is expected to remain
-blocked rather than report a false pass.
-
----
-
-## 🎨 Frontend Team Integration Guide
-
-The frontend connects to the backend at `http://localhost:4000/api/v1`.
-
-### 1. Authentication
-- Send `POST /api/v1/auth/login` with `{ email, password }`.
-- Store `accessToken` and pass it in the `Authorization: Bearer <token>` header for protected endpoints.
-- When expired, call `POST /api/v1/auth/refresh` with `{ refreshToken }`.
-
-### 2. Canva Template Workflow
-1. Design your certificate in Canva with placeholders for student name, event date, QR code, etc.
-2. Export the template from Canva as a high-resolution PNG or JPEG.
-3. Upload the background using `PATCH /api/v1/templates/:templateId` (`multipart/form-data` with field `background`).
-4. Customize dynamic text positions in `layout` using fractional coordinates `(0.0 to 1.0)`:
-   - `x`, `y`: Top-left offset as fraction of page width & height
-   - `width`: Width of the bounding box
-   - `fontSize`: Base font size in points (auto-shrinks if name is long)
-5. Call `GET /api/v1/templates/:templateId/preview` to view and download a live sample PDF.
-
-### 3. Issuing Single Certificate
-`POST /api/v1/certificates` (JSON):
-```json
-{
-  "eventId": "UUID_OF_EVENT",
-  "templateId": "UUID_OF_TEMPLATE",
-  "studentName": "Shravanya Andhale",
-  "studentId": "2023CS0101",
-  "achievement": "First Prize",
-  "certificateTitle": "Certificate of Excellence"
-}
-```
-**Response includes:**
-- `certificateId`: e.g., `CERT-2026-X8K9M3P2`
-- `status`: `CONFIRMED`
-- `documentHash`: `0x...` (SHA-256 of the generated PDF)
-- `txHash`: Transaction hash recorded on blockchain
-- `blockNumber`: Block number of transaction
-- `verificationUrl`: Stable public URL for QR scanning
-
-### 4. Bulk Issuance via CSV Upload
-`POST /api/v1/certificates/bulk` (`multipart/form-data`):
-- `eventId`: UUID
-- `templateId`: UUID
-- `file`: CSV file
-
-**Supported CSV Format:**
-```csv
-student_name,student_id,achievement
-"Arnav Chaudhary","CS-2023-001","Special Mention"
-"Shravanya Andhale","CS-2023-002","First Prize"
-"Karuna Jeswani","CS-2023-003","Runner Up"
-"Nikhil Kadam","CS-2023-004","Finalist"
-```
-Returns row-level statuses and batch details.
-
-### 5. Public Verification (No Login Required)
-- **By ID:** `GET /api/v1/verify/:certificateId`
-  - Queries blockchain directly in real-time.
-  - Returns `VERIFIED`, `REVOKED`, or `NOT_FOUND`.
-- **By Uploaded PDF:** `POST /api/v1/verify/document`
-  - Upload PDF file under `file`.
-  - Calculates SHA-256 and compares to blockchain registry.
-  - Returns `HASH_MISMATCH` if any single character or image was modified!
-
----
-
-## 🧪 Testing
-
-### Smart Contract Unit Tests
-```powershell
 npm run test:contracts
-```
-Runs 13 tests covering registration, role-based access, duplicate prevention, custom errors, lookups, and revocations.
-
-### End-to-End API Integration Tests
-```powershell
 npm run test:api
+
+cd ..\frontend
+npm run build
+npm run lint
 ```
-Tests complete flows: Auth -> Events -> Single Issuance -> PDF Tamper Detection -> Bulk 10 Recipients -> Revocation.
 
----
+The complete acceptance checklist is maintained in [docs/PROJECT_REQUIREMENTS.md](docs/PROJECT_REQUIREMENTS.md).
 
-## 🌐 Deploying to Ethereum Sepolia Testnet
+## Team
 
-1. Obtain a Sepolia RPC URL (Infura/Alchemy) and a funded private key.
-2. In `backend/.env`:
-   ```env
-   SEPOLIA_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
-   DEPLOYER_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
-   BLOCKCHAIN_NETWORK=sepolia
-   BLOCKCHAIN_RPC_URL=https://sepolia.infura.io/v3/YOUR_INFURA_KEY
-   CHAIN_ID=11155111
-   BLOCKCHAIN_PRIVATE_KEY=0xYOUR_SEPOLIA_PRIVATE_KEY
-   ```
-3. Deploy:
-   ```powershell
-   npm run deploy:sepolia
-   ```
+- 02 - Shravanya Andhale
+- 06 - Arnav Chaudhary
+- 11 - Karuna Jeswani
+- 12 - Nikhil Kadam

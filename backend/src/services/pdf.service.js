@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
+const { PDFDocument: PdfLibDocument, StandardFonts, rgb } = require('pdf-lib');
 const { generateQrPng } = require('./qr.service');
 const { STANDARD_FONTS } = require('../modules/templates/layout.schema');
 
@@ -40,10 +41,19 @@ function buildValues(data, verificationUrl, dateFormat) {
     institutionName: data.institutionName || '',
     issuerName: data.issuerName || '',
     signatoryName: data.signatoryName || '',
+    signatoryDesignation: data.signatoryDesignation || data.signatoryTitle || '',
     signatoryTitle: data.signatoryTitle || '',
     venue: data.venue || '',
+    department: data.department || '',
+    certificateType: data.certificateType || '',
+    teamName: data.teamName || '',
+    projectTitle: data.projectTitle || '',
+    position: data.position || '',
     certificateId: data.certificateId,
     verificationUrl,
+    qrCode: verificationUrl,
+    signatureImage: data.signatureImage || '',
+    institutionLogo: data.institutionLogo || '',
   };
 }
 
@@ -106,6 +116,90 @@ function toBuffer(doc) {
   });
 }
 
+function pdfLibColor(hex) {
+  return rgb(parseInt(hex.slice(1, 3), 16) / 255, parseInt(hex.slice(3, 5), 16) / 255, parseInt(hex.slice(5, 7), 16) / 255);
+}
+
+function pdfLibFont(font) {
+  const map = {
+    Helvetica: StandardFonts.Helvetica,
+    'Helvetica-Bold': StandardFonts.HelveticaBold,
+    'Helvetica-Oblique': StandardFonts.HelveticaOblique,
+    'Helvetica-BoldOblique': StandardFonts.HelveticaBoldOblique,
+    'Times-Roman': StandardFonts.TimesRoman,
+    'Times-Bold': StandardFonts.TimesRomanBold,
+    'Times-Italic': StandardFonts.TimesRomanItalic,
+    'Times-BoldItalic': StandardFonts.TimesRomanBoldItalic,
+    Courier: StandardFonts.Courier,
+    'Courier-Bold': StandardFonts.CourierBold,
+    'Courier-Oblique': StandardFonts.CourierOblique,
+    'Courier-BoldOblique': StandardFonts.CourierBoldOblique,
+  };
+  return map[font] || StandardFonts.Helvetica;
+}
+
+function drawPdfLibText(page, spec, rawText, values, fonts) {
+  if (!rawText) return;
+  let text = `${spec.prefix || ''}${rawText}${spec.suffix || ''}`;
+  if (spec.uppercase) text = text.toUpperCase();
+  const { width, height } = page.getSize();
+  const font = fonts[pdfLibFont(spec.font || 'Helvetica')];
+  const size = spec.fontSize;
+  page.drawText(text, {
+    x: spec.x * width,
+    y: height - (spec.y * height) - size,
+    size,
+    maxWidth: spec.width * width,
+    font,
+    color: pdfLibColor(spec.color || '#111111'),
+    lineHeight: size * 1.15,
+  });
+}
+
+function drawRedactRegions(page, regions) {
+  const { width, height } = page.getSize();
+  for (const region of regions || []) {
+    page.drawRectangle({
+      x: region.x * width,
+      y: height - (region.y * height) - (region.height * height),
+      width: region.width * width,
+      height: region.height * height,
+      color: pdfLibColor(region.color || '#FFFFFF'),
+    });
+  }
+}
+
+async function renderPdfTemplate({ template, background, data, verificationUrl }) {
+  const sourceDoc = await PdfLibDocument.load(background);
+  const output = await PdfLibDocument.create();
+  const sourcePages = await output.copyPages(sourceDoc, sourceDoc.getPageIndices());
+  sourcePages.forEach((page) => output.addPage(page));
+  const page = output.getPages()[0];
+  const layout = template.layout;
+  const values = buildValues(data, verificationUrl, layout.dateFormat);
+  drawRedactRegions(page, layout.redactRegions);
+  const fonts = {};
+  for (const spec of Object.values(layout.fields || {})) {
+    if (spec) fonts[pdfLibFont(spec.font || 'Helvetica')] = await output.embedFont(pdfLibFont(spec.font || 'Helvetica'));
+  }
+  for (const spec of layout.customTexts || []) {
+    fonts[pdfLibFont(spec.font || 'Helvetica')] = await output.embedFont(pdfLibFont(spec.font || 'Helvetica'));
+  }
+  for (const [name, spec] of Object.entries(layout.fields || {})) {
+    if (spec && !(layout.fieldPolicy?.hidden || []).includes(name)) drawPdfLibText(page, spec, values[name], values, fonts);
+  }
+  for (const block of layout.customTexts || []) {
+    drawPdfLibText(page, block, fillPlaceholders(block.text, values), values, fonts);
+  }
+  const qr = layout.qrCode;
+  const qrPng = await generateQrPng(verificationUrl, { dark: qr.dark, light: qr.light });
+  const qrImage = await output.embedPng(qrPng);
+  const { width, height } = page.getSize();
+  const qrSize = qr.size * width;
+  page.drawImage(qrImage, { x: qr.x * width, y: height - (qr.y * height) - qrSize, width: qrSize, height: qrSize });
+  return Buffer.from(await output.save());
+}
+
 /**
  * Renders the final personalized certificate PDF.
  * @param {object} p
@@ -116,6 +210,9 @@ function toBuffer(doc) {
  * @returns {Promise<Buffer>} exact PDF bytes (these are what get hashed)
  */
 async function renderCertificatePdf({ template, background, data, verificationUrl }) {
+  if (template.backgroundMimeType === 'application/pdf') {
+    return renderPdfTemplate({ template, background, data, verificationUrl });
+  }
   const layout = template.layout;
   const values = buildValues(data, verificationUrl, layout.dateFormat);
 
@@ -149,9 +246,18 @@ async function renderCertificatePdf({ template, background, data, verificationUr
   if (image) doc.image(image, 0, 0, { width: page.width, height: page.height });
   else drawFallbackBackground(doc, page);
 
+  for (const region of layout.redactRegions || []) {
+    doc.fillColor(region.color || '#FFFFFF').rect(
+      region.x * page.width,
+      region.y * page.height,
+      region.width * page.width,
+      region.height * page.height,
+    ).fill();
+  }
+
   const registered = new Set();
   for (const [name, spec] of Object.entries(layout.fields || {})) {
-    if (spec) drawText(doc, spec, values[name], page, registered);
+    if (spec && !(layout.fieldPolicy?.hidden || []).includes(name)) drawText(doc, spec, values[name], page, registered);
   }
   for (const block of layout.customTexts || []) {
     drawText(doc, block, fillPlaceholders(block.text, values), page, registered);

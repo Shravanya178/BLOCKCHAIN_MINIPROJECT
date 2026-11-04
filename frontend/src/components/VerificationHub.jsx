@@ -15,7 +15,8 @@ import {
   FileText,
   Clock,
   Layers,
-  ArrowRight
+  ArrowRight,
+  Cpu
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../services/api';

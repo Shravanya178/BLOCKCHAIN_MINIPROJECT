@@ -27,6 +27,25 @@ describe('CertificateRegistry', () => {
       expect(await registry.hasRole(ISSUER_ROLE, admin.address)).to.equal(false);
       expect(await registry.hasRole(ISSUER_ROLE, stranger.address)).to.equal(false);
     });
+
+    it('supports separate administrator, deployer issuer, and additional issuer wallets', async () => {
+      const [admin, deployerIssuer, additionalIssuer, stranger] = await ethers.getSigners();
+      const Registry = await ethers.getContractFactory('CertificateRegistry');
+      const registry = await Registry.deploy(admin.address, deployerIssuer.address);
+      await registry.waitForDeployment();
+
+      const adminRole = await registry.DEFAULT_ADMIN_ROLE();
+      const issuerRole = await registry.ISSUER_ROLE();
+      expect(await registry.hasRole(adminRole, admin.address)).to.equal(true);
+      expect(await registry.hasRole(issuerRole, deployerIssuer.address)).to.equal(true);
+      expect(await registry.hasRole(issuerRole, additionalIssuer.address)).to.equal(false);
+
+      await expect(registry.connect(stranger).grantRole(issuerRole, additionalIssuer.address))
+        .to.be.revertedWithCustomError(registry, 'AccessControlUnauthorizedAccount')
+        .withArgs(stranger.address, adminRole);
+      await registry.connect(admin).grantRole(issuerRole, additionalIssuer.address);
+      expect(await registry.hasRole(issuerRole, additionalIssuer.address)).to.equal(true);
+    });
   });
 
   describe('registration', () => {

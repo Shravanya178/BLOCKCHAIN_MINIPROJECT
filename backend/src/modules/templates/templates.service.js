@@ -1,6 +1,8 @@
 'use strict';
 
 const { z } = require('zod');
+const fs = require('fs/promises');
+const path = require('path');
 const prisma = require('../../config/prisma');
 const AppError = require('../../utils/AppError');
 const storage = require('../../services/storage.service');
@@ -96,7 +98,15 @@ async function getUsableTemplate(templateId) {
 }
 
 async function loadBackground(template) {
-  return template.backgroundKey ? storage.read(template.backgroundKey) : null;
+  if (!template.backgroundKey) return null;
+  if (template.backgroundKey.startsWith('source:TEMPLATES/')) {
+    const relative = template.backgroundKey.slice('source:'.length);
+    const root = path.resolve(__dirname, '../../../..');
+    const sourcePath = path.resolve(root, relative);
+    if (!sourcePath.startsWith(`${root}${path.sep}`)) throw AppError.unavailable('Invalid template source path');
+    return fs.readFile(sourcePath);
+  }
+  return storage.read(template.backgroundKey);
 }
 
 async function list({ category, includeInactive }, user) {
